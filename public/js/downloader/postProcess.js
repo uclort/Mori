@@ -5,8 +5,58 @@ import {
   playCompletionSound,
   autoClearInputBox,
 } from "../utils/index.js";
-import { translations } from "../i18n/index.js";
+import { translations, t } from "../i18n/index.js";
 import { currentLang } from "../modules/core.js";
+import { showToast } from "../utils/toast.js";
+import { setButtonContent } from "../ui/buttonContent.js";
+import {
+  getSaveTarget,
+  albumMediaKind,
+  isAlbumSupported,
+  saveFileToAlbum,
+} from "./album.js";
+
+let lastAlbumToastAt = 0;
+function albumToast(message) {
+  // Avoid flooding the screen during multi-photo / playlist downloads
+  const now = Date.now();
+  if (now - lastAlbumToastAt < 2500) return;
+  lastAlbumToastAt = now;
+  showToast(message);
+}
+
+/**
+ * Copies the freshly downloaded file into the photo library according to the
+ * "Save Location" setting. Returns true when the local copy was removed
+ * (album-only mode), so callers stop referencing it.
+ */
+async function applySaveTarget({ savedFile, successfulDir, savedUri, fileName }) {
+  const target = getSaveTarget();
+  if (target === "files" || !albumMediaKind(fileName) || !isAlbumSupported()) {
+    return false;
+  }
+  const res = await saveFileToAlbum({
+    path: savedFile.path,
+    directory: successfulDir,
+    uri: savedUri,
+    name: fileName,
+  });
+  if (!res.ok) {
+    albumToast(
+      res.reason === "denied" ? t("toast-album-denied") : t("toast-album-failed"),
+    );
+    return false;
+  }
+  if (target === "album" && Filesystem && successfulDir !== "DESKTOP") {
+    try {
+      await Filesystem.deleteFile({ path: savedFile.path, directory: successfulDir });
+      return true;
+    } catch (e) {
+      console.warn("Failed to remove local copy after album save:", e);
+    }
+  }
+  return false;
+}
 
 /**
  * Handles all post-download actions: sound, haptics, URI resolution, MediaScanner, notifications, and UI reset
@@ -51,6 +101,13 @@ export async function handlePostDownload({
     }
   } catch (_) {}
 
+  const albumOnly = await applySaveTarget({
+    savedFile,
+    successfulDir,
+    savedUri,
+    fileName,
+  });
+
   window.dispatchEvent(
     new CustomEvent("mori_file_saved", {
       detail: {
@@ -58,11 +115,12 @@ export async function handlePostDownload({
         path: savedFile.path,
         uri: savedUri,
         title: effectiveTitle,
+        albumOnly,
       },
     }),
   );
 
-  if (window.MoriMainBridge?.scanMediaFile) {
+  if (!albumOnly && window.MoriMainBridge?.scanMediaFile) {
     try {
       window.MoriMainBridge.scanMediaFile(savedFile.path || savedUri);
     } catch (_) {}
@@ -77,7 +135,7 @@ export async function handlePostDownload({
     try {
       window.MoriMainBridge.showCompleteNotification(
         effectiveTitle,
-        `${displayFolder}/${fileName}`,
+        albumOnly ? t("label-saved-to-album") : `${displayFolder}/${fileName}`,
       );
     } catch (_) {}
   }
@@ -90,7 +148,7 @@ export async function handlePostDownload({
         b.textContent =
           translations[currentLang]?.["label-download"] || "DOWNLOAD";
       } else {
-        btn.innerHTML = originalContent;
+        setButtonContent(btn, originalContent);
       }
     }
     if (!window._moriPlaylistDownloading) {
@@ -103,5 +161,6 @@ export async function handlePostDownload({
     path: savedFile.path,
     uri: savedUri,
     title: effectiveTitle,
+    albumOnly,
   };
 }

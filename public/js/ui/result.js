@@ -23,6 +23,13 @@ import { startNativeDownload } from "./nativeDownload.js";
 import { downloadBubble } from "./downloadBubble.js";
 import { escapeHtml } from "../ui.js";
 import { ensurePdfLib } from "../utils/pdfHelper.js";
+import { openImageLightbox } from "../components/imageLightbox.js";
+
+function mediaUrlOf(item) {
+  if (!item) return "";
+  if (typeof item.url === "string") return item.url;
+  return item.url?.url || item.url?.src || String(item.url || "");
+}
 
 export function renderMediaSlides(container, items, resultThumbnail) {
   if (!container) return;
@@ -1084,9 +1091,17 @@ export function renderResult(result, originalUrl) {
       downloadList.appendChild(pdfBtn);
     }
 
+    // Thumbnails + tap-to-enlarge for multi-photo posts, so each row maps to a visible image
+    const showPhotoThumbs = isMultiPhoto && !isMultiTrackContent;
+    const photoPreviewUrls = showPhotoThumbs
+      ? photoDownloads.map((d) => d.thumbnail || mediaUrlOf(d))
+      : [];
+    const photoButtons = [];
+
     result.downloads.forEach((dl, index) => {
       const btn = document.createElement("button");
       btn.className = "dl-item";
+      const photoIndex = showPhotoThumbs ? photoDownloads.indexOf(dl) : -1;
 
       // Clean UI display label by removing raw [MP3]/[MP4] tags
       let cleanType = (dl.type || "")
@@ -1100,9 +1115,42 @@ export function renderResult(result, originalUrl) {
       } else {
         const label = dl.quality ? `${cleanType} - ${dl.quality}` : cleanType;
         btn.innerHTML = `<div>${translations[currentLang]["label-download"]} ${index + 1}</div><span>${escapeHtml(label)}</span>`;
+        if (photoIndex !== -1) {
+          btn.classList.add("has-thumb");
+          const thumbWrap = document.createElement("div");
+          thumbWrap.className = "dl-thumb";
+          thumbWrap.title = t("label-tap-to-preview");
+          thumbWrap.innerHTML = `<span class="dl-thumb-index">${photoIndex + 1}</span>`;
+          const thumbImg = document.createElement("img");
+          thumbImg.alt = "";
+          thumbImg.loading = "lazy";
+          thumbImg.decoding = "async";
+          setupImageLoading(thumbImg, photoPreviewUrls[photoIndex], result.thumbnail);
+          thumbWrap.prepend(thumbImg);
+          btn.prepend(thumbWrap);
+          photoButtons[photoIndex] = btn;
+        }
       }
 
       btn.addEventListener("click", async (e) => {
+        // Tapping the thumbnail previews the photo instead of downloading it
+        if (photoIndex !== -1 && e.target.closest(".dl-thumb")) {
+          e.preventDefault();
+          e.stopPropagation();
+          openImageLightbox({
+            images: photoDownloads.map((d) => mediaUrlOf(d) || d.thumbnail),
+            startIndex: photoIndex,
+            loadImage: (img, src) => setupImageLoading(img, src, result.thumbnail),
+            onDownload: (i) => {
+              const target = photoButtons[i];
+              if (target && !target.disabled) {
+                target.click();
+                showToast(t("toast-download-started-photo", { index: i + 1 }));
+              }
+            },
+          });
+          return;
+        }
         let itemTitle = result.title;
         if (isTrackItem) {
           itemTitle = cleanType.replace(/^\d+\.\s+/, "");

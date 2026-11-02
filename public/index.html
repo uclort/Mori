@@ -570,6 +570,9 @@
                   <div class="gallery-sort-item" data-value="smallest" data-i18n="gallery-sort-smallest">Smallest</div>
                 </div>
               </div>
+              <button class="gallery-rescan gallery-select-toggle" type="button" aria-label="Select" data-i18n-title="gallery-select-multiple" title="Select">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M19 3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.11 0 2-.9 2-2V5c0-1.1-.89-2-2-2zm0 16H5V5h14v14zM17.99 9l-1.41-1.42-6.59 6.59-2.58-2.57-1.42 1.41 4 3.99z"/></svg>
+              </button>
               <button class="gallery-rescan" aria-label="Rescan">
                 <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
                   <path d="M17.65 6.35A7.958 7.958 0 0 0 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0 1 12 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
@@ -600,6 +603,27 @@
               <path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/>
             </svg>
             <p data-i18n="gallery-empty">No media found in your Mori folders yet.</p>
+          </div>
+
+          <!-- Multi-select action bar -->
+          <div class="gallery-select-bar hidden">
+            <div class="gallery-select-bar-top">
+              <span class="gallery-select-count"></span>
+              <button type="button" class="gallery-select-all" data-i18n="gallery-select-all">Select All</button>
+            </div>
+            <div class="gallery-select-bar-actions">
+              <button type="button" class="gallery-select-btn gallery-select-save" disabled>
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
+                <span data-i18n="btn-save-to-album">Save to Photos</span>
+              </button>
+              <button type="button" class="gallery-select-btn gallery-select-delete destructive" disabled>
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
+                <span data-i18n="btn-delete">Delete</span>
+              </button>
+              <button type="button" class="gallery-select-btn gallery-select-done">
+                <span data-i18n="btn-done">Done</span>
+              </button>
+            </div>
           </div>
         </div>
 
@@ -1483,9 +1507,16 @@
                   </svg>
                   <span data-i18n="label-darkmode">Dark Mode</span>
                 </div>
-                <div class="toggle-switch">
-                  <input type="checkbox" id="darkModeToggle" />
-                  <label for="darkModeToggle"></label>
+                <div class="custom-select" id="themeModeSelect">
+                  <div class="selected-text" id="themeModeText" data-i18n="theme-system">Follow System</div>
+                  <div class="dropdown-arrow">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M7 10l5 5 5-5z" /></svg>
+                  </div>
+                  <div class="dropdown-menu hidden" id="themeModeMenu">
+                    <div class="dropdown-item" data-value="system" data-i18n="theme-system">Follow System</div>
+                    <div class="dropdown-item" data-value="light" data-i18n="theme-light">Light</div>
+                    <div class="dropdown-item" data-value="dark" data-i18n="theme-dark">Dark</div>
+                  </div>
                 </div>
               </div>
               <!-- Compact Mode -->
@@ -2231,6 +2262,29 @@
                   >
                 </div>
               </div>
+              <!-- Save Location (Files / Photos / Both) -->
+              <div class="settings-item" id="saveTargetItem">
+                <div class="item-label">
+                  <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+                    <path d="M22 16V4c0-1.1-.9-2-2-2H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2zm-11-4l2.03 2.71L16 11l4 5H8l3-4zM2 6v14c0 1.1.9 2 2 2h14v-2H4V6H2z" />
+                  </svg>
+                  <span data-i18n="label-save-target">Save Location</span>
+                </div>
+                <div class="custom-select" id="saveTargetSelect">
+                  <div class="selected-text" id="saveTargetText" data-i18n="save-target-files">Files Only</div>
+                  <div class="dropdown-arrow">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M7 10l5 5 5-5z" /></svg>
+                  </div>
+                  <div class="dropdown-menu hidden" id="saveTargetMenu">
+                    <div class="dropdown-item" data-value="files" data-i18n="save-target-files">Files Only</div>
+                    <div class="dropdown-item" data-value="album" data-i18n="save-target-album">Photos Only</div>
+                    <div class="dropdown-item" data-value="both" data-i18n="save-target-both">Files &amp; Photos</div>
+                  </div>
+                </div>
+                <div class="settings-item-note" data-i18n="desc-save-target">
+                  Note: only photos and videos (JPG, PNG, WEBP, GIF, HEIC, MP4, MOV) can be saved to Photos. PDF, audio and other formats are always saved to Files, whichever option you choose.
+                </div>
+              </div>
               <!-- Filename Template -->
               <div class="settings-item">
                 <div class="item-label">
@@ -2580,6 +2634,29 @@
                     </div>
                   </div>
                 </div>
+              </div>
+              <!-- Downloaded Files Stats -->
+              <div class="settings-item info-only stacked-item" id="downloadStatsItem">
+                <div class="path-item-header">
+                  <div class="item-label">
+                    <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+                      <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zM9 17H7v-7h2v7zm4 0h-2V7h2v10zm4 0h-2v-4h2v4z" />
+                    </svg>
+                    <span data-i18n="label-downloaded-files">Downloaded Files</span>
+                  </div>
+                  <span class="info-val" id="downloadStatsVal">—</span>
+                </div>
+                <div class="download-stats-breakdown" id="downloadStatsBreakdown"></div>
+              </div>
+              <!-- Clear Downloaded Files -->
+              <div class="settings-item action-item" id="clearDownloadsBtn">
+                <div class="item-label">
+                  <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+                    <path d="M15 16h4v2h-4zm0-8h7v2h-7zm0 4h6v2h-6zM3 18c0 1.1.9 2 2 2h6c1.1 0 2-.9 2-2V8H3v10zM14 5h-3l-1-1H6L5 5H2v2h12z" />
+                  </svg>
+                  <span data-i18n="label-clear-downloads">Clear Downloaded Files</span>
+                </div>
+                <span class="action-label" data-i18n="btn-clear-all">CLEAR ALL</span>
               </div>
               <!-- Total Media Size -->
               <div class="settings-item info-only">

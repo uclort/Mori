@@ -1,0 +1,476 @@
+/* Action sheet, gallery multi-select, photo thumbnails & lightbox, storage stats */
+
+/* ---------- Action Sheet ---------- */
+.mori-action-sheet-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2600;
+  background: rgba(0, 0, 0, 0);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  transition: background 0.2s ease;
+}
+
+.mori-action-sheet-overlay.visible {
+  background: rgba(0, 0, 0, 0.45);
+}
+
+.mori-action-sheet {
+  width: 100%;
+  max-width: 500px;
+  padding: 0 10px calc(10px + env(safe-area-inset-bottom, 0px));
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  transform: translateY(100%);
+  transition: transform 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.mori-action-sheet-overlay.visible .mori-action-sheet {
+  transform: translateY(0);
+}
+
+.mori-action-sheet-group,
+.mori-action-sheet-cancel {
+  background: var(--bg-color);
+  border: 1px solid var(--primary);
+  border-radius: 14px;
+  overflow: hidden;
+}
+
+.mori-action-sheet-head {
+  padding: 12px 16px;
+  text-align: center;
+  border-bottom: 1px solid rgba(var(--primary-rgb), 0.2);
+}
+
+.mori-action-sheet-title {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--text-main);
+  word-break: break-all;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.mori-action-sheet-message {
+  margin-top: 4px;
+  font-size: 0.72rem;
+  color: var(--text-secondary);
+}
+
+.mori-action-sheet-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 15px 16px;
+  background: none;
+  border: none;
+  border-bottom: 1px solid rgba(var(--primary-rgb), 0.2);
+  color: var(--text-main);
+  font-family: inherit;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.mori-action-sheet-btn:last-child {
+  border-bottom: none;
+}
+
+.mori-action-sheet-btn:active {
+  background: rgba(var(--primary-rgb), 0.08);
+}
+
+.mori-action-sheet-btn.destructive {
+  color: var(--color-danger, #ef4444);
+}
+
+/* Higher specificity than .mori-action-sheet-btn (which resets background/border) */
+.mori-action-sheet-btn.mori-action-sheet-cancel {
+  background: var(--bg-color);
+  border: 1px solid var(--primary);
+  border-radius: 14px;
+  font-weight: 700;
+}
+
+/* ---------- Gallery multi-select ---------- */
+.gallery-select-toggle {
+  margin-right: 0;
+}
+
+#galleryPage.select-mode .gallery-select-toggle {
+  background: var(--primary);
+  color: var(--on-primary);
+}
+
+.gallery-select-check {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 4;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 2px solid #fff;
+  background: rgba(0, 0, 0, 0.25);
+  color: transparent;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+}
+
+#galleryPage.select-mode .gallery-select-check {
+  display: flex;
+}
+
+#galleryPage.select-mode .gallery-cat-badge {
+  opacity: 0;
+}
+
+#galleryPage.select-mode .gallery-card-del-btn {
+  display: none;
+}
+
+.gallery-item.is-selected .gallery-select-check {
+  background: var(--primary);
+  border-color: var(--on-primary);
+  color: var(--on-primary);
+}
+
+#galleryPage.select-mode .gallery-item.is-selected {
+  outline: 3px solid var(--primary);
+  outline-offset: -3px;
+}
+
+#galleryPage.select-mode .gallery-item:hover {
+  transform: none;
+}
+
+#galleryPage.select-mode .gallery-grid {
+  padding-bottom: 130px;
+}
+
+body.gallery-selecting .bottom-nav,
+body.gallery-selecting .download-bubble-container {
+  display: none !important;
+}
+
+.gallery-select-bar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  margin: 0 auto;
+  max-width: 500px;
+  z-index: 1000;
+  background: var(--bg-color);
+  border-top: 1px solid var(--primary);
+  padding: 10px 14px calc(12px + env(safe-area-inset-bottom, 0px));
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  animation: gallerySelectBarIn 0.2s ease;
+}
+
+.gallery-select-bar.hidden {
+  display: none;
+}
+
+@keyframes gallerySelectBarIn {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+.gallery-select-bar-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.gallery-select-count {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.gallery-select-all {
+  background: none;
+  border: none;
+  color: var(--text-main);
+  font-family: inherit;
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-decoration: underline;
+  cursor: pointer;
+  padding: 4px 0;
+}
+
+.gallery-select-bar-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.gallery-select-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 10px 8px;
+  border-radius: 10px;
+  border: 1px solid var(--primary);
+  background: var(--surface);
+  color: var(--text-main);
+  font-family: inherit;
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.gallery-select-btn.destructive {
+  color: var(--color-danger, #ef4444);
+}
+
+.gallery-select-btn.gallery-select-done {
+  flex: 0 0 auto;
+  padding: 10px 16px;
+  background: var(--primary);
+  color: var(--on-primary);
+}
+
+.gallery-select-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.gallery-viewer-save-btn {
+  padding: 6px;
+  border-radius: 50%;
+  border: none;
+  background: transparent;
+  color: var(--text-main);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.gallery-viewer-save-btn:hover {
+  background: rgba(var(--primary-rgb), 0.1);
+}
+
+.gallery-viewer-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* ---------- Multi-photo list thumbnails ---------- */
+.dl-item.has-thumb {
+  justify-content: flex-start;
+  gap: 12px;
+  padding: 10px 16px;
+  text-align: left;
+}
+
+.dl-item.has-thumb > span:last-child {
+  margin-left: auto;
+}
+
+.dl-thumb {
+  position: relative;
+  flex-shrink: 0;
+  width: 52px;
+  height: 52px;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid var(--primary);
+  background: var(--surface);
+  cursor: zoom-in;
+}
+
+.dl-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.dl-thumb-index {
+  position: absolute;
+  right: 3px;
+  bottom: 3px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  box-sizing: border-box;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+  font-size: 0.6rem !important;
+  font-weight: 700;
+  line-height: 16px;
+  text-align: center;
+}
+
+/* ---------- Image lightbox ---------- */
+.mori-lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 2500;
+  background: rgba(0, 0, 0, 0.94);
+  display: flex;
+  flex-direction: column;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  touch-action: pan-y;
+}
+
+.mori-lightbox.visible {
+  opacity: 1;
+}
+
+.mori-lightbox-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: calc(10px + env(safe-area-inset-top, 0px)) 14px 10px;
+  color: #fff;
+}
+
+.mori-lightbox-counter {
+  font-size: 0.85rem;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+
+.mori-lightbox-close,
+.mori-lightbox-nav {
+  border: none;
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.mori-lightbox-stage {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: auto;
+}
+
+.mori-lightbox-img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  transition: transform 0.2s ease;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.mori-lightbox-img.zoomed {
+  transform: scale(2);
+  cursor: zoom-out;
+}
+
+.mori-lightbox-nav {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.mori-lightbox-nav.prev {
+  left: 10px;
+}
+
+.mori-lightbox-nav.next {
+  right: 10px;
+}
+
+.mori-lightbox-bottom {
+  display: flex;
+  justify-content: center;
+  padding: 12px 16px calc(16px + env(safe-area-inset-bottom, 0px));
+}
+
+.mori-lightbox-download {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 11px 22px;
+  border-radius: 24px;
+  border: none;
+  background: #fff;
+  color: #111;
+  font-family: inherit;
+  font-size: 0.85rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+/* ---------- Storage settings ---------- */
+.settings-item-note {
+  font-size: 0.72rem;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+#downloadStatsItem .path-item-header {
+  width: 100%;
+}
+
+#downloadStatsItem .info-val {
+  background: none;
+  border: none;
+  padding: 0;
+  word-break: normal;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.download-stats-breakdown {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.download-stats-chip {
+  font-size: 0.7rem;
+  padding: 4px 10px;
+  border-radius: 20px;
+  border: 1px solid rgba(var(--primary-rgb), 0.4);
+  color: var(--text-secondary);
+}
+
+.download-stats-chip b {
+  color: var(--text-main);
+  margin-right: 2px;
+}
+
+#downloadStatsVal {
+  text-transform: none;
+}

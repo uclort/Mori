@@ -6,11 +6,16 @@ import {
   normalizePathInput,
   normalizeSavedPath,
 } from "../../utils/index.js";
-import { translations } from "../../i18n/index.js";
+import { translations, t } from "../../i18n/index.js";
 import { showConfirm } from "../modals.js";
 import { renderHistory } from "../../ui.js";
 import { onHistoryItemClick, onHistoryDeleteClick, safeSetHistory } from "../history.js";
-import { invalidateGalleryCache } from "../gallery.js";
+import {
+  invalidateGalleryCache,
+  getDownloadedFilesStats,
+  deleteAllDownloadedFiles,
+} from "../gallery.js";
+import { isAlbumSupported } from "../../downloader/album.js";
 import {
   currentLang,
   pathVal,
@@ -140,6 +145,56 @@ export async function updateStorageInfo() {
   } catch (e) {
     console.error("Storage size error:", e);
     storageVal.textContent = "0.00 MB";
+  }
+}
+
+function formatSize(bytes) {
+  if (!bytes || bytes <= 0) return "0 B";
+  const units = ["B", "KB", "MB", "GB"];
+  let i = 0;
+  let v = bytes;
+  while (v >= 1024 && i < units.length - 1) {
+    v /= 1024;
+    i++;
+  }
+  return `${v.toFixed(v >= 100 || i === 0 ? 0 : 1)} ${units[i]}`;
+}
+
+let statsRequestId = 0;
+/**
+ * Refreshes "Downloaded Files" stats (count, total size, per-type breakdown).
+ */
+export async function updateDownloadStats() {
+  const valEl = document.getElementById("downloadStatsVal");
+  const breakdownEl = document.getElementById("downloadStatsBreakdown");
+  if (!valEl) return;
+  const reqId = ++statsRequestId;
+  try {
+    const stats = await getDownloadedFilesStats(true);
+    if (reqId !== statsRequestId) return;
+    valEl.textContent = t("label-files-summary", {
+      count: stats.count,
+      size: formatSize(stats.size),
+    });
+    if (breakdownEl) {
+      const order = [
+        ["video", "gallery-filter-video"],
+        ["image", "gallery-filter-image"],
+        ["audio", "gallery-filter-audio"],
+        ["pdf", "gallery-filter-pdf"],
+      ];
+      breakdownEl.innerHTML = order
+        .filter(([cat]) => stats.byCategory[cat]?.count)
+        .map(([cat, key]) => {
+          const c = stats.byCategory[cat];
+          return `<span class="download-stats-chip"><b>${t(key)}</b> ${c.count} · ${formatSize(c.size)}</span>`;
+        })
+        .join("");
+      breakdownEl.style.display = stats.count ? "" : "none";
+    }
+  } catch (e) {
+    console.warn("Download stats error:", e);
+    if (reqId === statsRequestId) valEl.textContent = "—";
   }
 }
 
@@ -425,7 +480,7 @@ export function initStorageSettings() {
       });
     }, 100);
     if (okConfirmBtn) {
-      okConfirmBtn.textContent = "SAVE";
+      okConfirmBtn.textContent = t("btn-save");
       okConfirmBtn.classList.add("neutral-btn");
     }
   });
@@ -550,9 +605,58 @@ export function initStorageSettings() {
       });
     }, 100);
     if (okConfirmBtn) {
-      okConfirmBtn.textContent = "SAVE";
+      okConfirmBtn.textContent = t("btn-save");
       okConfirmBtn.classList.add("neutral-btn");
     }
+  });
+
+  // Save location (Files / Photos / Both) — only meaningful on iOS / Android
+  const saveTargetItem = document.getElementById("saveTargetItem");
+  if (saveTargetItem && !isAlbumSupported()) {
+    // Plugin registration can lag behind on cold start; re-check once
+    saveTargetItem.style.display = "none";
+    setTimeout(() => {
+      if (isAlbumSupported()) saveTargetItem.style.display = "";
+    }, 1200);
+  }
+
+  // Downloaded files stats: refresh whenever the Storage page is opened or files change
+  document.addEventListener("click", (e) => {
+    if (e.target.closest?.('[data-target="settingsStorage"]')) {
+      updateDownloadStats();
+      updateStorageInfo();
+    }
+  });
+  let statsDebounce = null;
+  const scheduleStats = () => {
+    clearTimeout(statsDebounce);
+    statsDebounce = setTimeout(updateDownloadStats, 800);
+  };
+  window.addEventListener("mori_download_ended", scheduleStats);
+  window.addEventListener("mori_downloads_cleared", scheduleStats);
+  window.addEventListener("mori_language_changed", updateDownloadStats);
+
+  // Clear all downloaded files
+  document.getElementById("clearDownloadsBtn")?.addEventListener("click", async () => {
+    const stats = await getDownloadedFilesStats(true).catch(() => null);
+    if (!stats || stats.count === 0) {
+      showToast(t("toast-no-downloads"));
+      return;
+    }
+    showConfirm(
+      t("label-clear-downloads"),
+      t("confirm-clear-downloads", {
+        count: stats.count,
+        size: formatSize(stats.size),
+      }),
+      async () => {
+        showToast(t("toast-clearing-downloads"));
+        const res = await deleteAllDownloadedFiles();
+        await updateDownloadStats();
+        await updateStorageInfo();
+        showToast(t("toast-downloads-cleared", { count: res.deleted }));
+      },
+    );
   });
 
   // 5. Manual Clear Cache Button
@@ -605,6 +709,7 @@ export function initStorageSettings() {
         try {
           const langPref = localStorage.getItem("mori_lang");
           const theme = localStorage.getItem("mori_theme");
+          const themeMode = localStorage.getItem("mori_theme_mode");
           const vPath = localStorage.getItem("mori_download_path");
           const mPath = localStorage.getItem("mori_music_path");
 
@@ -612,6 +717,7 @@ export function initStorageSettings() {
 
           if (langPref) localStorage.setItem("mori_lang", langPref);
           if (theme) localStorage.setItem("mori_theme", theme);
+          if (themeMode) localStorage.setItem("mori_theme_mode", themeMode);
           if (vPath) localStorage.setItem("mori_download_path", vPath);
           if (mPath) localStorage.setItem("mori_music_path", mPath);
 

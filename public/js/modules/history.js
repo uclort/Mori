@@ -278,13 +278,15 @@ window.toggleMoriFavorite = toggleFavorite;
 // Global Event for File Saved (Syncing UI and History)
 window.addEventListener("mori_file_saved", async (e) => {
   if (localStorage.getItem("mori_incognito") === "true") return;
+  // Album-only saves have no local copy left to reference
+  if (e.detail?.albumOnly) return;
   const { url, path, uri } = e.detail;
   const target = cleanUrl(url);
   let history = JSON.parse(localStorage.getItem("mori_history") || "[]");
 
   const isVideo = path.toLowerCase().endsWith(".mp4");
   const isAudio = path.toLowerCase().endsWith(".mp3");
-  const isImage = /\.(jpg|jpeg|png|webp)/i.test(path);
+  const isImage = /\.(jpg|jpeg|png|webp|gif|heic|heif)/i.test(path);
   const fileUri = uri || path;
 
   let matched = false;

@@ -8,10 +8,16 @@ import {
 import { showConfirm } from "./modals.js";
 import { t } from "../i18n/index.js";
 import { createVideoPlayer } from "../components/player.js";
+import { showActionSheet } from "../components/actionSheet.js";
+import {
+  saveFileToAlbum,
+  albumMediaKind,
+  isAlbumSupported,
+} from "../downloader/album.js";
 
 const VIDEO_EXT = /\.(mp4|mov|mkv|webm|m4v)$/i;
 const AUDIO_EXT = /\.(mp3|m4a|aac|opus|flac|wav|ogg)$/i;
-const IMAGE_EXT = /\.(jpe?g|png|webp|gif|bmp)$/i;
+const IMAGE_EXT = /\.(jpe?g|png|webp|gif|bmp|heic|heif|avif)$/i;
 const PDF_EXT = /\.(pdf)$/i;
 
 let galleryItems = [];
@@ -22,6 +28,15 @@ let activeScanPromise = null;
 let searchDebounceTimer = null;
 const cardCache = new Map();
 let galleryNeedsRescan = false;
+let selectMode = false;
+const selectedPaths = new Set();
+
+const ICON_SAVE =
+  '<svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>';
+const ICON_DELETE =
+  '<svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>';
+const ICON_SELECT =
+  '<svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M19 3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.11 0 2-.9 2-2V5c0-1.1-.89-2-2-2zm-9 14l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>';
 
 function esc(str) {
   return String(str ?? "")
@@ -122,6 +137,10 @@ export function isGalleryEnabled() {
 
 export async function scanGallery(force = false) {
   if (!isGalleryEnabled()) return [];
+  return scanGalleryAll(force);
+}
+
+async function scanGalleryAll(force = false) {
   if (activeScanPromise) return activeScanPromise;
   if (!force && galleryItems.length > 0) return galleryItems;
 
@@ -134,6 +153,21 @@ export async function scanGallery(force = false) {
         window.__TAURI__?.invoke;
       const items = [];
       const seen = new Set();
+
+      // Absolute base URI per Capacitor directory. Paths returned by readdir are
+      // relative to the directory root (e.g. iOS app Documents), so media URLs must
+      // be built from the real base, not from "/" + relative path.
+      const baseUris = new Map();
+      async function getBaseUri(directory) {
+        if (baseUris.has(directory)) return baseUris.get(directory);
+        let base = null;
+        try {
+          const res = await Filesystem.getUri({ path: "", directory });
+          if (res?.uri) base = res.uri.replace(/\/+$/, "");
+        } catch (_) {}
+        baseUris.set(directory, base);
+        return base;
+      }
 
       // Recursively collect files from directories (handles nested music folders)
       async function collectRecursive(dirPath, directory) {
@@ -152,9 +186,11 @@ export async function scanGallery(force = false) {
               const key = relPath.toLowerCase();
               if (seen.has(key)) continue;
               seen.add(key);
+              const base = await getBaseUri(directory);
               items.push({
                 name: file.name,
                 path: relPath,
+                uri: file.uri || (base ? `${base}/${relPath}` : null),
                 directory,
                 category: cat,
                 size: file.size || 0,
@@ -488,7 +524,7 @@ function getThumbFromHistory(item) {
   }
 }
 
-export async function deleteGalleryItem(item) {
+export async function deleteGalleryItem(item, { render = true } = {}) {
   if (!item) return false;
   let deleted = false;
 
@@ -563,6 +599,7 @@ export async function deleteGalleryItem(item) {
   }
   memoryThumbCache.delete(item.path);
   memoryThumbCache.delete(item.name);
+  selectedPaths.delete(item.path);
 
   // Clean from mori_history localFiles / localUri if referenced
   try {
@@ -602,7 +639,7 @@ export async function deleteGalleryItem(item) {
     }
   } catch (_) {}
 
-  renderGallery();
+  if (render) renderGallery();
   return deleted;
 }
 
@@ -623,6 +660,198 @@ export function confirmDeleteGalleryItem(item, onDeleted = null) {
       showToast(t("toast-delete-fail") || "Failed to delete file");
     }
   });
+}
+
+/**
+ * Saves gallery items (images / videos) into the system photo library.
+ */
+export async function saveGalleryItemsToAlbum(items) {
+  const list = (items || []).filter(Boolean);
+  if (!list.length) return;
+  const eligible = list.filter((i) => albumMediaKind(i.name));
+  if (!eligible.length) {
+    showToast(t("toast-album-unsupported"));
+    return;
+  }
+  if (list.length > 1) showToast(t("toast-album-saving", { count: eligible.length }));
+  let ok = 0;
+  let denied = false;
+  for (const it of eligible) {
+    const res = await saveFileToAlbum(it);
+    if (res.ok) ok++;
+    else if (res.reason === "denied") {
+      denied = true;
+      break;
+    }
+  }
+  if (denied) {
+    showToast(t("toast-album-denied"));
+  } else if (ok === 0) {
+    showToast(t("toast-album-failed"));
+  } else if (ok === list.length) {
+    triggerHaptic?.("success");
+    showToast(
+      ok > 1 ? t("toast-album-saved-count", { count: ok }) : t("toast-album-saved"),
+    );
+  } else {
+    triggerHaptic?.("success");
+    showToast(
+      t("toast-album-saved-partial", { count: ok, skipped: list.length - ok }),
+    );
+  }
+}
+
+function showGalleryItemActions(item) {
+  const actions = [];
+  if (isAlbumSupported() && albumMediaKind(item.name)) {
+    actions.push({
+      label: t("btn-save-to-album"),
+      icon: ICON_SAVE,
+      onClick: () => saveGalleryItemsToAlbum([item]),
+    });
+  }
+  actions.push({
+    label: t("gallery-select-multiple"),
+    icon: ICON_SELECT,
+    onClick: () => {
+      enterSelectMode();
+      toggleSelected(item);
+    },
+  });
+  actions.push({
+    label: t("btn-delete"),
+    icon: ICON_DELETE,
+    destructive: true,
+    onClick: () => confirmDeleteGalleryItem(item),
+  });
+  showActionSheet({
+    title: item.name,
+    message: [
+      item.mtime ? new Date(item.mtime).toLocaleDateString([], { dateStyle: "medium" }) : "",
+      formatBytes(item.size),
+    ]
+      .filter(Boolean)
+      .join(" · "),
+    actions,
+  });
+}
+
+/* ---------- Multi-select ---------- */
+
+function getSelectedItems() {
+  return galleryItems.filter((i) => selectedPaths.has(i.path));
+}
+
+function syncCardSelection(card, path) {
+  card.classList.toggle("is-selected", selectedPaths.has(path));
+}
+
+function updateSelectBar() {
+  const page = document.getElementById("galleryPage");
+  if (!page) return;
+  page.classList.toggle("select-mode", selectMode);
+  document.body.classList.toggle("gallery-selecting", selectMode);
+  const bar = document.querySelector(".gallery-select-bar");
+  if (!bar) return;
+  bar.classList.toggle("hidden", !selectMode);
+  const selected = getSelectedItems();
+  const totalSize = selected.reduce((sum, i) => sum + (i.size || 0), 0);
+  const countEl = bar.querySelector(".gallery-select-count");
+  if (countEl) {
+    countEl.textContent =
+      t("gallery-selected-count", { count: selected.length }) +
+      (totalSize ? ` · ${formatBytes(totalSize)}` : "");
+  }
+  const visible = filteredItems();
+  const allSelected = visible.length > 0 && visible.every((i) => selectedPaths.has(i.path));
+  const allBtn = bar.querySelector(".gallery-select-all");
+  if (allBtn) allBtn.textContent = allSelected ? t("gallery-deselect-all") : t("gallery-select-all");
+  const hasSel = selected.length > 0;
+  bar.querySelector(".gallery-select-save")?.toggleAttribute("disabled", !hasSel);
+  bar.querySelector(".gallery-select-delete")?.toggleAttribute("disabled", !hasSel);
+  const saveBtn = bar.querySelector(".gallery-select-save");
+  if (saveBtn) saveBtn.style.display = isAlbumSupported() ? "" : "none";
+  page.querySelectorAll(".gallery-item").forEach((card) =>
+    syncCardSelection(card, card.getAttribute("data-path")),
+  );
+}
+
+function enterSelectMode() {
+  if (selectMode) return;
+  selectMode = true;
+  selectedPaths.clear();
+  triggerHaptic?.("light");
+  updateSelectBar();
+}
+
+export function exitGallerySelectMode() {
+  if (!selectMode) return;
+  selectMode = false;
+  selectedPaths.clear();
+  updateSelectBar();
+}
+
+function toggleSelected(item) {
+  if (selectedPaths.has(item.path)) selectedPaths.delete(item.path);
+  else selectedPaths.add(item.path);
+  triggerHaptic?.("light");
+  updateSelectBar();
+}
+
+function confirmDeleteSelected() {
+  const items = getSelectedItems();
+  if (!items.length) return;
+  showConfirm(
+    t("gallery-delete-title"),
+    t("gallery-delete-selected-confirm", { count: items.length }),
+    async () => {
+      let ok = 0;
+      for (const it of items) {
+        try {
+          if (await deleteGalleryItem(it, { render: false })) ok++;
+        } catch (_) {}
+      }
+      exitGallerySelectMode();
+      renderGallery();
+      showToast(t("gallery-files-deleted", { count: ok }));
+    },
+  );
+}
+
+/* ---------- Stats & bulk cleanup (used by Storage settings) ---------- */
+
+/**
+ * @returns {Promise<{count:number,size:number,byCategory:Record<string,{count:number,size:number}>}>}
+ */
+export async function getDownloadedFilesStats(force = true) {
+  const items = await scanGalleryAll(force);
+  const byCategory = {};
+  let size = 0;
+  for (const it of items) {
+    size += it.size || 0;
+    const c = (byCategory[it.category] ||= { count: 0, size: 0 });
+    c.count++;
+    c.size += it.size || 0;
+  }
+  return { count: items.length, size, byCategory };
+}
+
+/**
+ * Deletes every media file Mori downloaded into its folders.
+ * @returns {Promise<{deleted:number,total:number}>}
+ */
+export async function deleteAllDownloadedFiles() {
+  const items = [...(await scanGalleryAll(true))];
+  let deleted = 0;
+  for (const it of items) {
+    try {
+      if (await deleteGalleryItem(it, { render: false })) deleted++;
+    } catch (_) {}
+  }
+  exitGallerySelectMode();
+  invalidateGalleryCache();
+  window.dispatchEvent(new CustomEvent("mori_downloads_cleared"));
+  return { deleted, total: items.length };
 }
 
 // Queue for asynchronous native / canvas thumbnail extraction
@@ -767,7 +996,7 @@ function loadVideoThumbnailAsync(item, img) {
       }
 
       // 4. Fallback: Video element canvas capture
-      const mediaUrl = toLocalMediaUrl(item.path);
+      const mediaUrl = toLocalMediaUrl(item.uri || item.path);
       extractCanvasThumb(mediaUrl, (dataUrl) => {
         if (dataUrl) {
           persistThumb(item.path, dataUrl);
@@ -988,7 +1217,7 @@ function buildItem(item) {
     card.classList.add("is-favorite");
   }
 
-  const mediaUrl = toLocalMediaUrl(item.path);
+  const mediaUrl = toLocalMediaUrl(item.uri || item.path);
   const thumb = document.createElement("div");
   thumb.className = "gallery-thumb";
   const label = document.createElement("span");
@@ -1031,6 +1260,13 @@ function buildItem(item) {
   }
   thumb.appendChild(label);
 
+  const check = document.createElement("span");
+  check.className = "gallery-select-check";
+  check.innerHTML =
+    '<svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>';
+  thumb.appendChild(check);
+  if (selectedPaths.has(item.path)) card.classList.add("is-selected");
+
   if (isFav) {
     const favBadge = document.createElement("span");
     favBadge.className = "gallery-fav-badge";
@@ -1067,11 +1303,13 @@ function buildItem(item) {
 
   let pressTimer = null;
   let isLongPress = false;
+  let lastTouchAt = 0;
   let startX = 0;
   let startY = 0;
 
   const startPress = (e) => {
     isLongPress = false;
+    if (e.touches) lastTouchAt = Date.now();
     if (e.touches && e.touches[0]) {
       startX = e.touches[0].clientX;
       startY = e.touches[0].clientY;
@@ -1082,7 +1320,8 @@ function buildItem(item) {
         window.getSelection()?.removeAllRanges();
       } catch (_) {}
       triggerHaptic?.("medium");
-      confirmDeleteGalleryItem(item);
+      if (selectMode) toggleSelected(item);
+      else showGalleryItemActions(item);
     }, 550);
   };
 
@@ -1113,7 +1352,11 @@ function buildItem(item) {
   card.addEventListener("contextmenu", (e) => {
     e.preventDefault();
     e.stopPropagation();
-    confirmDeleteGalleryItem(item);
+    // Touch long-press is handled by the timer above; only react to mouse right-click
+    if (Date.now() - lastTouchAt < 1500) return;
+    cancelPress();
+    if (selectMode) toggleSelected(item);
+    else showGalleryItemActions(item);
   });
 
   card.addEventListener("click", (e) => {
@@ -1122,6 +1365,10 @@ function buildItem(item) {
       e.preventDefault();
       e.stopPropagation();
       isLongPress = false;
+      return;
+    }
+    if (selectMode) {
+      toggleSelected(item);
       return;
     }
     openGalleryViewer(item);
@@ -1193,7 +1440,10 @@ function renderGallery(resetLimit = false) {
   const countEl = page.querySelector(".gallery-count");
   const items = filteredItems();
   if (countEl) {
-    countEl.textContent = `${items.length} ${t("gallery-count-items")}`;
+    const totalSize = items.reduce((sum, i) => sum + (i.size || 0), 0);
+    countEl.textContent =
+      `${items.length} ${t("gallery-count-items")}` +
+      (totalSize ? ` · ${formatBytes(totalSize)}` : "");
   }
 
   if (items.length === 0) {
@@ -1232,6 +1482,7 @@ function renderGallery(resetLimit = false) {
       card = buildItem(item);
     } else {
       syncCardFavoriteState(card, item);
+      syncCardSelection(card, item.path);
     }
     cardCache.set(item.path, card);
     frag.appendChild(card);
@@ -1249,6 +1500,7 @@ function renderGallery(resetLimit = false) {
   }
 
   grid.appendChild(frag);
+  if (selectMode) updateSelectBar();
 
   // Setup infinite scroll sentinel
   let sentinel = grid.querySelector(".gallery-scroll-sentinel");
@@ -1353,7 +1605,7 @@ async function fetchPdfBytes(item) {
     } catch (_) {}
   }
 
-  const url = toLocalMediaUrl(item.path);
+  const url = toLocalMediaUrl(item.uri || item.path);
   if (url) {
     try {
       const res = await fetch(url);
@@ -1732,6 +1984,11 @@ function openGalleryViewer(item) {
       <p>${esc(item.path)}</p>
     </div>
     <div class="gallery-viewer-actions">
+      ${
+        isAlbumSupported() && albumMediaKind(item.name)
+          ? `<button class="gallery-viewer-save-btn" type="button" aria-label="${esc(t("btn-save-to-album"))}" title="${esc(t("btn-save-to-album"))}">${ICON_SAVE}</button>`
+          : ""
+      }
       <button class="gallery-viewer-del-btn" type="button" aria-label="${t("btn-delete") || "Delete"}" title="${t("btn-delete") || "Delete"}">
         <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
           <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
@@ -1739,6 +1996,11 @@ function openGalleryViewer(item) {
       </button>
     </div>
   `;
+
+  header.querySelector(".gallery-viewer-save-btn")?.addEventListener("click", (e) => {
+    e.stopPropagation();
+    saveGalleryItemsToAlbum([item]);
+  });
 
   header.querySelector(".gallery-viewer-del-btn")?.addEventListener("click", (e) => {
     e.stopPropagation();
@@ -1748,7 +2010,7 @@ function openGalleryViewer(item) {
   const body = document.createElement("div");
   body.className = "gallery-viewer-body";
 
-  const mediaUrl = toLocalMediaUrl(item.path);
+  const mediaUrl = toLocalMediaUrl(item.uri || item.path);
 
   if (item.category === "image") {
     const img = document.createElement("img");
@@ -1763,7 +2025,7 @@ function openGalleryViewer(item) {
     const player = createVideoPlayer(
       {
         url: mediaUrl,
-        rawUri: item.path,
+        rawUri: item.uri || item.path,
         rawPath: item.path,
         type: "VIDEO",
         isLocal: true,
@@ -1919,6 +2181,36 @@ export function initGallery() {
       sortMenu.classList.add("hidden");
       sortSelect?.classList.remove("active");
     }
+  });
+
+  // Multi-select
+  page.querySelector(".gallery-select-toggle")?.addEventListener("click", () => {
+    if (selectMode) exitGallerySelectMode();
+    else enterSelectMode();
+  });
+  // Portal the bar to <body>: an ancestor of #galleryPage forms a containing block,
+  // which would stop position:fixed from pinning it to the bottom of the viewport.
+  const bar = page.querySelector(".gallery-select-bar");
+  if (bar) document.body.appendChild(bar);
+  bar?.querySelector(".gallery-select-all")?.addEventListener("click", () => {
+    const visible = filteredItems();
+    const allSelected = visible.length > 0 && visible.every((i) => selectedPaths.has(i.path));
+    if (allSelected) visible.forEach((i) => selectedPaths.delete(i.path));
+    else visible.forEach((i) => selectedPaths.add(i.path));
+    updateSelectBar();
+  });
+  bar?.querySelector(".gallery-select-save")?.addEventListener("click", async () => {
+    const items = getSelectedItems();
+    if (!items.length) return;
+    await saveGalleryItemsToAlbum(items);
+    exitGallerySelectMode();
+  });
+  bar?.querySelector(".gallery-select-delete")?.addEventListener("click", confirmDeleteSelected);
+  bar?.querySelector(".gallery-select-done")?.addEventListener("click", exitGallerySelectMode);
+  // Leaving the gallery tab ends selection
+  document.addEventListener("click", (e) => {
+    const nav = e.target.closest?.(".nav-item");
+    if (nav && nav.getAttribute("data-page") !== "gallery") exitGallerySelectMode();
   });
 
   const searchInput = page.querySelector(".gallery-search");

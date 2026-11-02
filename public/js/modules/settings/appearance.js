@@ -1,12 +1,52 @@
 // appearance.js — theme, colors, typography, and visual presets
 import { translations } from "../../i18n/index.js";
 import { showToast } from "../../utils/index.js";
-import { currentLang, darkModeToggle } from "../core.js";
+import { currentLang } from "../core.js";
 import { syncSettingToNative } from "./nativeSync.js";
 
 const accentColors = {
   black: { light: "#1a1917", dark: "#fffbf2" },
 };
+
+const THEME_MODES = ["system", "light", "dark"];
+const darkQuery =
+  typeof window !== "undefined" && window.matchMedia
+    ? window.matchMedia("(prefers-color-scheme: dark)")
+    : null;
+
+/**
+ * Theme preference: "system" (follow device) | "light" | "dark"
+ */
+export function getThemeMode() {
+  const mode = localStorage.getItem("mori_theme_mode");
+  if (THEME_MODES.includes(mode)) return mode;
+  // Migrate users who picked a theme with the old on/off switch
+  const legacy = localStorage.getItem("mori_theme");
+  return legacy === "dark" || legacy === "light" ? legacy : "system";
+}
+
+function resolveTheme(mode) {
+  if (mode === "system") return darkQuery?.matches ? "dark" : "light";
+  return mode;
+}
+
+/**
+ * Applies the effective theme for the current mode. "mori_theme" keeps holding the
+ * resolved light/dark value because the share page and native side read it.
+ */
+export function applyThemeMode() {
+  const theme = resolveTheme(getThemeMode());
+  const changed = document.documentElement.getAttribute("data-theme") !== theme;
+  document.documentElement.setAttribute("data-theme", theme);
+  if (localStorage.getItem("mori_theme") !== theme) {
+    localStorage.setItem("mori_theme", theme);
+    syncSettingToNative("mori_theme", theme);
+  }
+  applyColorAccent();
+  if (changed) {
+    window.dispatchEvent(new CustomEvent("mori_theme_changed", { detail: { theme } }));
+  }
+}
 
 export function applyColorAccent() {
   const theme = localStorage.getItem("mori_theme") || "light";
@@ -74,23 +114,20 @@ export function applyGalleryVisibility() {
  * Initializes theme, typography, presets, and toggle listeners
  */
 export function initAppearance() {
-  // 1. Theme initialization
-  const savedTheme = localStorage.getItem("mori_theme") || "light";
-  document.documentElement.setAttribute("data-theme", savedTheme);
-  if (darkModeToggle) darkModeToggle.checked = savedTheme === "dark";
-
-  darkModeToggle?.addEventListener("change", (e) => {
-    const theme = e.target.checked ? "dark" : "light";
-    document.documentElement.setAttribute("data-theme", theme);
-    localStorage.setItem("mori_theme", theme);
-    syncSettingToNative("mori_theme", theme);
-    applyColorAccent();
-    const lang = translations[currentLang] || translations.en;
-    showToast(
-      e.target.checked
-        ? lang["toast-darkmode-on"] || "Dark mode enabled"
-        : lang["toast-darkmode-off"] || "Light mode enabled",
-    );
+  // 1. Theme initialization (System / Light / Dark)
+  if (!THEME_MODES.includes(localStorage.getItem("mori_theme_mode"))) {
+    localStorage.setItem("mori_theme_mode", getThemeMode());
+  }
+  applyThemeMode();
+  const onSystemThemeChange = () => {
+    if (getThemeMode() === "system") applyThemeMode();
+  };
+  if (darkQuery?.addEventListener) darkQuery.addEventListener("change", onSystemThemeChange);
+  else darkQuery?.addListener?.(onSystemThemeChange);
+  // Some WebViews only re-evaluate the media query after returning to foreground
+  window.addEventListener("mori_app_resumed", onSystemThemeChange);
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) onSystemThemeChange();
   });
 
   // 2. Compact mode initialization

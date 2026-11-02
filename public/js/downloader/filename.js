@@ -40,6 +40,16 @@ export function resolveExtension(type, url) {
     }
   }
 
+  // CDN image URLs often end with pseudo extensions (e.g. Douyin "~tplv-...:q75.image",
+  // ".awebp"), which produce files no viewer recognizes. Coerce to a real image extension.
+  const isExplicitImageType = /image|photo/i.test(type || "");
+  const IMAGE_EXTS = ["jpg", "jpeg", "png", "webp", "gif", "heic", "heif", "avif", "bmp"];
+  if (isExplicitImageType && !IMAGE_EXTS.includes(ext.toLowerCase())) {
+    if (/webp/i.test(ext)) ext = "webp";
+    else if (/heic/i.test(ext)) ext = "heic";
+    else ext = "jpg";
+  }
+
   return ext.toLowerCase();
 }
 
@@ -209,7 +219,7 @@ export async function resolveUniqueFileName(
       if (overwriteMode === "skip") {
         if (btn) {
           const b = btn.querySelector(".dl-badge");
-          if (b) b.textContent = "SAVED";
+          if (b) b.textContent = "✓";
         }
         return {
           skipped: true,

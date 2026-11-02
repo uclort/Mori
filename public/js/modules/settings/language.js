@@ -21,6 +21,8 @@ import {
   applyTextSize,
   applyGlassmorphism,
   applyUiCorner,
+  applyThemeMode,
+  getThemeMode,
 } from "./appearance.js";
 import { updateDlStatsDisplay } from "./storage.js";
 
@@ -60,7 +62,11 @@ export function setupCustomSelect(selectId, storageKey, textId, menuId) {
                             ? "3"
                             : storageKey === "mori_lang"
                               ? currentLang
-                              : "default";
+                              : storageKey === "mori_save_target"
+                                ? "files"
+                                : storageKey === "mori_theme_mode"
+                                  ? getThemeMode()
+                                  : "default";
   const currentVal = localStorage.getItem(storageKey) || defaultFallback;
 
   // Update display on load
@@ -120,10 +126,16 @@ export function setupCustomSelect(selectId, storageKey, textId, menuId) {
       if (storageKey === "mori_glassmorphism") applyGlassmorphism();
       if (storageKey === "mori_ui_corner") applyUiCorner();
       if (storageKey === "mori_sound_pack") previewSound(val);
+      if (storageKey === "mori_theme_mode") applyThemeMode();
 
+      const settingsItem = select.closest(".settings-item");
       const labelText =
-        select.closest(".settings-item")?.querySelector(".settings-title span")
-          ?.textContent || "Setting";
+        (
+          settingsItem?.querySelector(".settings-title span") ||
+          settingsItem?.querySelector(".item-label span")
+        )?.textContent?.trim() ||
+        (translations[currentLang] || translations.en)["label-setting"] ||
+        "Setting";
       showToast(`${labelText}: ${item.textContent.trim()}`);
     });
   });
@@ -261,6 +273,22 @@ export function updateCustomSelectsUI() {
   if (cornerText)
     cornerText.textContent = lang[`corner-${currentCorner}`] || currentCorner;
 
+  const currentSaveTarget = localStorage.getItem("mori_save_target") || "files";
+  const saveTargetText = document.getElementById("saveTargetText");
+  if (saveTargetText)
+    saveTargetText.textContent =
+      lang[`save-target-${currentSaveTarget}`] ||
+      translations.en[`save-target-${currentSaveTarget}`] ||
+      currentSaveTarget;
+
+  const currentThemeMode = getThemeMode();
+  const themeModeText = document.getElementById("themeModeText");
+  if (themeModeText)
+    themeModeText.textContent =
+      lang[`theme-${currentThemeMode}`] ||
+      translations.en[`theme-${currentThemeMode}`] ||
+      currentThemeMode;
+
   const currentSoundPack = localStorage.getItem("mori_sound_pack") || "chime";
   const soundPackText = document.getElementById("soundPackText");
   if (soundPackText)
@@ -277,6 +305,14 @@ export function updateLanguageUI() {
     const key = el.getAttribute("data-i18n");
     const val = lang?.[key] ?? fallback[key];
     if (val !== undefined) el.textContent = val;
+  });
+  document.querySelectorAll("[data-i18n-title]").forEach((el) => {
+    const key = el.getAttribute("data-i18n-title");
+    const val = lang?.[key] ?? fallback[key];
+    if (val !== undefined) {
+      el.title = val;
+      el.setAttribute("aria-label", val);
+    }
   });
   document.querySelectorAll("[data-i18n-placeholder]").forEach((el) => {
     const key = el.getAttribute("data-i18n-placeholder");
@@ -362,6 +398,8 @@ export function initLanguageAndNavigation() {
   setupCustomSelect("maxRetrySelect", "mori_max_retry", "maxRetryText", "maxRetryMenu");
   setupCustomSelect("dohSelect", "mori_doh", "dohText", "dohMenu");
   setupCustomSelect("toastDurSelect", "mori_toast_dur", "toastDurText", "toastDurMenu");
+  setupCustomSelect("saveTargetSelect", "mori_save_target", "saveTargetText", "saveTargetMenu");
+  setupCustomSelect("themeModeSelect", "mori_theme_mode", "themeModeText", "themeModeMenu");
 
   // 2. Sub-page Navigation
   document.addEventListener("click", (e) => {

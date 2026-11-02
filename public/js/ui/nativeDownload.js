@@ -20,6 +20,10 @@ import { needsAsyncResolving, resolveDownloadUrl } from "../downloader/resolver.
 import { saveToStorage } from "../downloader/storage.js";
 import { handlePostDownload } from "../downloader/postProcess.js";
 import { downloadBubble } from "./downloadBubble.js";
+import { getButtonContent, setButtonContent } from "./buttonContent.js";
+
+const savedLabel = () =>
+  (translations[currentLang]?.["status-saved"] || "Saved").toUpperCase();
 
 export function cancelCurrentDownload() {
   window._moriDownloadCancelled = true;
@@ -33,7 +37,7 @@ window._moriCancelDownload = cancelCurrentDownload;
 function handleCancelCleanup(btn, originalContent, progressContainer) {
   if (btn) {
     btn.disabled = false;
-    btn.innerHTML = originalContent;
+    setButtonContent(btn, originalContent);
   }
   if (progressContainer) progressContainer.classList.add("hidden");
 }
@@ -114,7 +118,7 @@ export async function startNativeDownload(
 
   const progressBar = document.getElementById("progressBar");
   const progressContainer = document.getElementById("progressContainer");
-  const originalContent = btn ? btn.innerHTML : "";
+  const originalContent = getButtonContent(btn);
 
   if (window.Capacitor?.getPlatform?.() === "android") {
     try {
@@ -202,7 +206,7 @@ export async function startNativeDownload(
     if (btn) {
       const b = btn.querySelector(".dl-badge");
       if (b) {
-        b.textContent = currentProgressVal >= 100 ? "SAVED" : `${currentProgressVal}%`;
+        b.textContent = currentProgressVal >= 100 ? savedLabel() : `${currentProgressVal}%`;
       }
     }
   };
@@ -210,7 +214,7 @@ export async function startNativeDownload(
   try {
     if (btn) btn.disabled = true;
     if (progressContainer) progressContainer.classList.remove("hidden");
-    updateProgress(0, "Downloading...");
+    updateProgress(0, t("status-downloading"));
 
     // Acquire Wake Lock & Start Native Foreground Service
     requestWakeLock();
@@ -229,8 +233,10 @@ export async function startNativeDownload(
       if (initialBadge) {
         initialBadge.textContent = "...";
       } else {
-        btn.innerHTML =
-          translations[currentLang]?.["btn-processing"] || "Processing...";
+        setButtonContent(
+          btn,
+          `<div>${translations[currentLang]?.["btn-processing"] || "Processing..."}</div>`,
+        );
       }
     }
     console.log("Starting download for:", url);
@@ -299,7 +305,7 @@ export async function startNativeDownload(
       const speed = currentSpeedBps > 0 ? currentSpeedBps : bytes / elapsedSec;
 
       let pct = 0;
-      let statusText = "Downloading...";
+      let statusText = t("status-downloading");
 
       if (contentLength > 0) {
         pct = Math.min(100, Math.round((bytes / contentLength) * 100));
@@ -467,11 +473,14 @@ export async function startNativeDownload(
     if (btn) {
       const b = btn.querySelector(".dl-badge");
       if (b) {
-        b.textContent = "SAVED";
+        b.textContent = savedLabel();
         b.style.backgroundColor = "";
         b.style.color = "";
       } else {
-        btn.innerHTML = `<svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" style="margin-right:8px"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg> SAVED`;
+        setButtonContent(
+          btn,
+          `<div class="dl-saved-label"><svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" style="margin-right:8px;vertical-align:-3px"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>${savedLabel()}</div>`,
+        );
       }
     }
 
@@ -487,7 +496,10 @@ export async function startNativeDownload(
       originalContent,
       progressContainer,
     });
-    downloadBubble.completeDownload(dlId, "Saved");
+    downloadBubble.completeDownload(
+      dlId,
+      postRes?.albumOnly ? t("label-saved-to-album") : t("status-saved"),
+    );
     return postRes;
   } catch (err) {
     console.error("Download failed", err);
@@ -535,7 +547,7 @@ export async function startNativeDownload(
             translations[currentLang]?.["label-download"] || "DOWNLOAD";
         }
       } else {
-        btn.innerHTML = originalContent;
+        setButtonContent(btn, originalContent);
       }
     }
     if (!window._moriPlaylistDownloading && progressContainer) {

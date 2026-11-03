@@ -1,0 +1,52 @@
+# Native SwiftUI iOS app. Regenerate the Xcode project with:  cd ios && xcodegen
+name: Mori
+options:
+  bundleIdPrefix: com.mori
+  deploymentTarget:
+    iOS: "16.0"
+  createIntermediateGroups: true
+  developmentLanguage: en
+settings:
+  base:
+    MARKETING_VERSION: "5.0.0"
+    CURRENT_PROJECT_VERSION: "50000"
+    SWIFT_VERSION: "5.0"
+    SWIFT_STRICT_CONCURRENCY: minimal
+    ENABLE_USER_SCRIPT_SANDBOXING: NO
+targets:
+  Mori:
+    type: application
+    platform: iOS
+    sources:
+      - path: Mori
+        excludes:
+          - "**/.DS_Store"
+      # Shared scraper core — single source of truth used by Android, CLI and OTA updates
+      - path: ../public/js/scrapers/bundle.js
+        buildPhase: resources
+        group: Mori/Engine/Shared
+      - path: ../public/scrapers-version.json
+        buildPhase: resources
+        group: Mori/Engine/Shared
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.mori.downloader
+        PRODUCT_NAME: Mori
+        INFOPLIST_FILE: Mori/Resources/Info.plist
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        TARGETED_DEVICE_FAMILY: "1,2"
+        SUPPORTS_MACCATALYST: NO
+        GENERATE_INFOPLIST_FILE: NO
+        LOCALIZATION_PREFERS_STRING_CATALOGS: NO
+        SWIFT_EMIT_LOC_STRINGS: YES
+        CODE_SIGN_STYLE: Automatic
+schemes:
+  Mori:
+    build:
+      targets:
+        Mori: all
+    run:
+      config: Debug
+    archive:
+      config: Release

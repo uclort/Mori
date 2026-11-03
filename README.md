@@ -6,7 +6,8 @@
 <p align="center"><em><strong>Save anything, From anywhere.</strong></em></p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Version-v4.5.1-brown?style=flat-square" alt="Version">
+  <img src="https://img.shields.io/badge/Version-v5.0.0-brown?style=flat-square" alt="Version">
+  <img src="https://img.shields.io/badge/iOS-Native%20SwiftUI-0A84FF?style=flat-square&logo=swift&logoColor=white" alt="iOS Native SwiftUI">
   <a href="https://www.npmjs.com/package/@coflyn/mori"><img src="https://img.shields.io/npm/v/@coflyn/mori?style=flat-square&color=CB3837&logo=npm&logoColor=white" alt="NPM Version"></a>
   <img src="https://img.shields.io/github/downloads/coflyn/Mori/total?style=flat-square&color=blue" alt="Downloads">
   <img src="https://img.shields.io/github/stars/coflyn/Mori?style=flat-square&color=gold" alt="Stars">
@@ -40,8 +41,59 @@ Save and download videos, photos, and music from 16 platforms. No watermarks. No
 
 ---
 
+## 🍎 iOS 原生重构（本分支 `custom/features`）
+
+从 **v5.0.0** 起，本分支的 iOS 版不再使用 Capacitor + WebView 界面，而是 **用 SwiftUI 完全重写的原生 App**。核心解析能力保持不变，其余功能全部改为原生实现。
+
+### 保留了什么
+
+- **解析核心原样保留**：16 个平台的解析器仍是 `public/js/scrapers/bundle.js`（与 Android、CLI 共用同一份代码，支持 OTA 热更新）。
+- 解析核心运行在一个**不可见的 WKWebView** 中，只把它当作 JS 运行时（`DOMParser`、`URL`、定时器）使用；解析器发出的所有网络请求都经 `CapacitorHttp` 兼容层交给原生 **URLSession** 处理，请求体/响应格式与原 Capacitor 版保持一致，解析器代码无需任何修改。
+- 链接二次解析（YouTube / Spotify / Apple Music / SnapSave 等 `*_resolve:` 链接）、服务器 1/2 选择、抖音短链跳转与重试等逻辑均从原 JS 代码移植到引擎宿主 `ios/Mori/Engine/EngineHost.js` 中。
+
+### 原生实现的功能
+
+| 功能 | 实现方式 |
+| :-- | :-- |
+| 界面 | SwiftUI（首页 / 图库 / 历史 / 设置 四个标签页），深色模式跟随系统 |
+| 网络请求 | URLSession（Cookie 共享、可选跳过 SSL 校验、可配置超时与 User-Agent） |
+| 下载管理 | URLSession 下载任务：实时进度与速度、取消/重试、可配置并发数（1–5）、切到后台后短时继续 |
+| 保存位置 | 「文件」App（`我的 iPhone › Mori`）/ 相册（PhotoKit）/ 两者；WebP 自动转 JPEG 入相册 |
+| 预览 | 图集轮播 + 双指缩放、AVPlayer 在线预览视频（自动带 Referer 等请求头） |
+| 图库 | QuickLook 预览视频/图片/音频/PDF，筛选、搜索、多选批量保存到相册/分享/删除 |
+| 图集导出 PDF | UIGraphicsPDFRenderer（替代 pdf-lib） |
+| 批量模式 | 输入框粘贴多个链接自动进入批量解析，失败时自动切换服务器 2 |
+| 剪贴板 | 系统 `PasteButton` + 链接模式检测，不再弹出粘贴权限提示 |
+| 隐私 | 无痕模式、面容 ID / 设备密码锁（LocalAuthentication） |
+| 解析引擎 | 设置中查看引擎版本、在线检查更新（OTA）、恢复内置引擎 |
+| 其他 | `mori://analyze?url=<链接>` URL Scheme、触感反馈、中英文本地化 |
+
+> 下载目录与旧版保持一致（`Documents/Download/Mori/<平台>`、`Documents/Music/Mori/<平台>`），升级后旧文件仍会出现在图库中。旧版 WebView 中的历史记录无法迁移。
+>
+> 相比旧 Web 界面移除的内容：动态背景、音效、PIN 数字锁（改用系统面容 ID/密码）、内置自定义播放器（改用系统播放器/QuickLook）；界面语言目前为简体中文与英文。
+>
+> 修复：解析器为单个下载项返回的专用请求头（如 Bilibili 要求的 `User-Agent: Bilibili/1.0`）现在会被正确带上，旧版会因此出现 HTTP 403。
+
+### 安装
+
+- 在 [Releases](https://github.com/uclort/Mori/releases) 下载 `Mori-v*-custom.*-unsigned.ipa`，用 AltStore / SideStore / TrollStore 等自行签名安装（最低 iOS 16）。
+
+### 从源码构建
+
+```bash
+brew install xcodegen          # 可选：修改 ios/project.yml 后重新生成工程
+cd ios && xcodegen generate    # 生成 Mori.xcodeproj（仓库中已提交生成结果）
+open Mori.xcodeproj            # 用 Xcode 直接运行
+
+# 打包未签名 ipa → dist/Mori-v<版本>-iOS-Unsigned.ipa
+npm run build:ios:ipa          # 等价于 bash ios/build-ipa.sh
+```
+
+---
+
 ## 📋 Table of Contents
 
+0. [iOS 原生重构（本分支）](#-ios-原生重构本分支-customfeatures)
 1. [How to Use](#-how-to-use)
 2. [Download & Installation](#-download--installation)
 3. [Mori CLI (Terminal)](#-mori-cli-terminal)
@@ -70,7 +122,7 @@ Pre-compiled, ready-to-use packages are available for all devices on **[GitHub R
 | Platform                                                                                                                        | Available Packages                                                | Installation Guide                                                                  |
 | :------------------------------------------------------------------------------------------------------------------------------ | :---------------------------------------------------------------- | :---------------------------------------------------------------------------------- |
 | <img src="https://cdn.simpleicons.org/android/3DDC84" width="16" /> **Android**                                                 | `Mori v...apk`                                                    | [Installation & Play Protect Guide](GUIDE.md#android-installation--troubleshooting) |
-| <img src="https://cdn.simpleicons.org/apple/000000" width="16" /> **iOS**                                                       | `Mori v...ipa`                                                    | [AltStore / TrollStore Sideloading](GUIDE.md#ios-sideloading-guide)                 |
+| <img src="https://cdn.simpleicons.org/apple/000000" width="16" /> **iOS (native SwiftUI)**                                      | `Mori-v...-unsigned.ipa`                                          | [AltStore / TrollStore Sideloading](GUIDE.md#ios-sideloading-guide)                 |
 | <img src="https://cdn.simpleicons.org/npm/CB3837" width="16" /> **CLI (Desktop & Server)**                                       | `npx @coflyn/mori`<br>`npm install -g @coflyn/mori`               | [Mori CLI Guide](#-mori-cli-terminal)                                               |
 
 > 📖 **Need help installing or troubleshooting?**  
@@ -179,7 +231,8 @@ Interested in customizing the interface, contributing translations, or compiling
 
 - **JavaScript (ES6+)**: Core application logic and client-side UI.
 - **HTML5 & CSS3**: Custom responsive design system with dark mode and smooth animations.
-- **CapacitorJS**: Native Android and iOS bridge for filesystem, share sheet, clipboard, and biometrics.
+- **SwiftUI (iOS)**: Fully native iOS app; the shared scraper core runs in a hidden WKWebView with a URLSession-backed HTTP bridge.
+- **CapacitorJS (Android)**: Native Android bridge for filesystem, share sheet, clipboard, and biometrics.
 - **OkHttp (Native Android)**: High-performance native HTTP engine to seamlessly bypass WebView CORS and network restrictions.
 - **Cheerio & Axios**: Fast DOM HTML parsing and HTTP client request handling.
 - **pdf-lib**: Client-side PDF generation and bundling.
@@ -196,8 +249,18 @@ Mori/
 │   │   │   └── ShareActivity.java  # Native Quick Save Share overlay & MediaStore indexer
 │   │   └── res/                # Android layout, drawables, XML configs & splash screens
 │   └── gradle/                 # Gradle build scripts & configurations
-├── ios/                        # Capacitor iOS Xcode workspace
-│   └── App/                    # iOS Xcode project, Info.plist, and CocoaPods
+├── ios/                        # Native SwiftUI iOS app (no Capacitor / CocoaPods)
+│   ├── project.yml             # XcodeGen spec (bundles ../public/js/scrapers/bundle.js as a resource)
+│   ├── Mori.xcodeproj          # Generated Xcode project
+│   ├── build-ipa.sh            # Unsigned .ipa packaging script
+│   └── Mori/
+│       ├── App/                # App entry, tab root, app lock, URL scheme
+│       ├── Engine/             # EngineHost.js (dispatcher + link resolver), WKWebView host, URLSession HTTP bridge, OTA store
+│       ├── Download/           # Download queue, CDN headers, file naming, Photos saver, PDF exporter
+│       ├── Models/             # Media result, platforms, settings, history & library stores
+│       ├── Views/              # SwiftUI screens: Home, Result, Downloads, Gallery, History, Settings
+│       ├── Utilities/          # Remote image loader (Referer-aware, cached)
+│       └── Resources/          # Info.plist, assets, en / zh-Hans localizations
 ├── cli/                        # Standalone Universal Media Downloader CLI (Node.js)
 ├── src-scrapers/               # Modular ES scraper engine source files (16 platforms)
 ├── scripts/                    # Build & compilation tooling
@@ -297,6 +360,7 @@ Mori/
 Mori's scraper core is bundled via esbuild into `public/js/scrapers/bundle.js` — a plain minified IIFE containing all 16 platform scrapers.
 
 - **OTA Hot-Patching**: When a platform changes its API, Mori can silently download and apply an updated `bundle.js` from GitHub without requiring a full app update.
+- **Native iOS host**: On iOS the same `bundle.js` is evaluated inside a hidden WKWebView. `ios/Mori/Engine/EngineHost.js` provides the `window.__moriDeps` utilities, a `CapacitorHttp`-compatible bridge to URLSession, platform routing and the download-link resolver, so the scrapers run unmodified.
 - **Open Client Architecture**: The entire frontend, UI design system, and core app logic remain **100% open source under GPL-3.0**.
 - **Collaborative Development**: Honest developers who want to improve scrapers or fix broken endpoints are always welcome to coordinate through [CONTRIBUTING.md](CONTRIBUTING.md).
 

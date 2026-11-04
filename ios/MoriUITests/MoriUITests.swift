@@ -136,6 +136,18 @@ final class MoriUITests: XCTestCase {
         shot("files_app")
     }
 
+    /// Open and close the photo browser so the zoom transition can be recorded.
+    func test7_ZoomTransition() {
+        launch(["-moriTestURL", "demo:photos"])
+        let first = app.descendants(matching: .any)["photo-0"]
+        XCTAssertTrue(first.waitForExistence(timeout: 10))
+        pause(5)
+        first.tap()
+        pause(2)
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        pause(2)
+    }
+
     func test4_SettingsDelete() {        launch(["-moriTab", "settings"])
         pause(2)
         shot("settings_top")

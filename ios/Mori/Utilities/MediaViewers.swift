@@ -52,7 +52,16 @@ final class PhotoBrowserPresenter: NSObject, JXPhotoBrowserDelegate {
     nonisolated func photoBrowser(_ browser: JXPhotoBrowserViewController, cellForItemAt index: Int,
                                   at indexPath: IndexPath) -> JXPhotoBrowserAnyCell {
         MainActor.assumeIsolated {
-            browser.dequeueReusableCell(withReuseIdentifier: JXZoomImageCell.reuseIdentifier, for: indexPath)
+            let cell = browser.dequeueReusableCell(withReuseIdentifier: JXZoomImageCell.reuseIdentifier, for: indexPath)
+            // Seed the cell with the same image the zoom starts from, so the
+            // transition's end frame (computed from this image's aspect) is
+            // exact and there is no jump or blank frame when it finishes.
+            if let zoom = cell as? JXZoomImageCell, photos.indices.contains(index),
+               let anchor = ThumbnailAnchorRegistry.shared.view(for: photos[index].url) as? UIImageView,
+               let image = anchor.image {
+                zoom.imageView.image = image
+            }
+            return cell
         }
     }
 
@@ -61,7 +70,9 @@ final class PhotoBrowserPresenter: NSObject, JXPhotoBrowserDelegate {
             guard let cell = cell as? JXZoomImageCell, photos.indices.contains(index) else { return }
             let photo = photos[index]
             guard let source = ImageLoader.source(for: photo.url) else { return }
-            cell.imageView.kf.indicatorType = .activity
+            // The cell was seeded with a screen-sized copy already — only show
+            // a spinner when there was nothing to show.
+            cell.imageView.kf.indicatorType = cell.imageView.image == nil ? .activity : .none
             cell.imageView.kf.setImage(
                 with: source,
                 options: [.requestModifier(ImageLoader.modifier(for: photo.url, sourceURL: photo.sourceURL, headers: photo.headers))]
@@ -75,7 +86,8 @@ final class PhotoBrowserPresenter: NSObject, JXPhotoBrowserDelegate {
     }
 
     /// View the zoom transition starts from and returns to: the SwiftUI
-    /// thumbnail registered by the grid cell for this photo.
+    /// thumbnail registered by the grid cell for this photo. It already holds
+    /// a screen-resolution copy of the photo, so the expanded view is sharp.
     nonisolated func photoBrowser(_ browser: JXPhotoBrowserViewController, thumbnailViewAt index: Int) -> UIView? {
         MainActor.assumeIsolated {
             guard photos.indices.contains(index) else { return nil }
@@ -84,29 +96,88 @@ final class PhotoBrowserPresenter: NSObject, JXPhotoBrowserDelegate {
     }
 }
 
-/// Zoom transition with a slightly longer, softer curve than the library default.
-private final class MoriZoomPresentAnimator: JXZoomPresentAnimator {
-    override func transitionDuration(using ctx: UIViewControllerContextTransitioning?) -> TimeInterval { 0.32 }
-}
-
-private final class MoriZoomDismissAnimator: JXZoomDismissAnimator {
-    override func transitionDuration(using ctx: UIViewControllerContextTransitioning?) -> TimeInterval { 0.32 }
-}
-
 private final class MoriPhotoBrowserViewController: JXPhotoBrowserViewController {
-    override func animationController(forPresented presented: UIViewController, presenting: UIViewController,
-                                      source: UIViewController) -> UIViewControllerAnimatedTransitioning? {
-        guard transitionType == .zoom else {
-            return super.animationController(forPresented: presented, presenting: presenting, source: source)
-        }
-        return MoriZoomPresentAnimator()
-    }
-
     override func animationController(forDismissed dismissed: UIViewController) -> UIViewControllerAnimatedTransitioning? {
         guard transitionType == .zoom else {
             return super.animationController(forDismissed: dismissed)
         }
-        return MoriZoomDismissAnimator()
+        return MoriPhotoDismissAnimator()
+    }
+}
+
+/// Shrinks the full-screen image back into the thumbnail. The last 40% of the
+/// flight cross-fades the zooming copy into the thumbnail, so the image never
+/// pops away when it reaches the original frame.
+private final class MoriPhotoDismissAnimator: NSObject, UIViewControllerAnimatedTransitioning {
+    func transitionDuration(using ctx: UIViewControllerContextTransitioning?) -> TimeInterval { 0.3 }
+
+    func animateTransition(using ctx: UIViewControllerContextTransitioning) {
+        let duration = transitionDuration(using: ctx)
+        guard let browser = ctx.viewController(forKey: .from) as? JXPhotoBrowserViewController,
+              let fromView = ctx.view(forKey: .from) else {
+            ctx.completeTransition(false)
+            return
+        }
+        let container = ctx.containerView
+        if let toView = ctx.view(forKey: .to) {
+            container.insertSubview(toView, belowSubview: fromView)
+            toView.layoutIfNeeded()
+        }
+
+        // No visible thumbnail (deleted, scrolled away, still loading): plain fade.
+        guard let source = browser.visibleCell()?.transitionImageView, source.bounds.size != .zero,
+              let thumbnail = browser.delegate?.photoBrowser(browser, thumbnailViewAt: browser.pageIndex) as? UIImageView,
+              thumbnail.window != nil else {
+            UIView.animate(withDuration: duration, animations: { fromView.alpha = 0 }) { _ in
+                MainActor.assumeIsolated {
+                    let finished = !ctx.transitionWasCancelled
+                    if !finished { fromView.alpha = 1 } else { fromView.removeFromSuperview() }
+                    ctx.completeTransition(finished)
+                }
+            }
+            return
+        }
+
+        let zoomView = UIImageView(image: source.image)
+        zoomView.contentMode = source.contentMode
+        zoomView.clipsToBounds = true
+        zoomView.layer.cornerRadius = source.layer.cornerRadius
+        zoomView.frame = source.convert(source.bounds, to: container)
+        container.addSubview(zoomView)
+
+        source.isHidden = true
+        thumbnail.alpha = 0
+        thumbnail.isHidden = false
+        let endFrame = thumbnail.convert(thumbnail.bounds, to: container)
+
+        UIView.animateKeyframes(
+            withDuration: duration,
+            delay: 0,
+            options: UIView.KeyframeAnimationOptions(rawValue: UIView.AnimationOptions.curveEaseOut.rawValue)
+        ) {
+            UIView.addKeyframe(withRelativeStartTime: 0, relativeDuration: 1) {
+                zoomView.frame = endFrame
+                zoomView.layer.cornerRadius = thumbnail.layer.cornerRadius
+                fromView.alpha = 0
+            }
+            UIView.addKeyframe(withRelativeStartTime: 0.6, relativeDuration: 0.4) {
+                zoomView.alpha = 0
+                thumbnail.alpha = 1
+            }
+        } completion: { _ in
+            MainActor.assumeIsolated {
+                zoomView.removeFromSuperview()
+                source.isHidden = false
+                thumbnail.alpha = 1
+                let finished = !ctx.transitionWasCancelled
+                if finished {
+                    fromView.removeFromSuperview()
+                } else {
+                    fromView.alpha = 1
+                }
+                ctx.completeTransition(finished)
+            }
+        }
     }
 }
 
@@ -132,14 +203,16 @@ final class ThumbnailAnchorRegistry {
 
 /// Invisible-in-place copy of a cell's thumbnail. It sits behind the SwiftUI
 /// image (which always stays visible, so nothing flashes while the zoom
-/// transition restores), and gives the browser a real UIView with a ready image.
+/// transition restores), and gives the browser a real UIView whose image is
+/// already screen-sized — the library copies this image into the zooming view,
+/// so the expansion stays sharp instead of blowing up a 400px thumbnail.
 struct ThumbnailAnchor: UIViewRepresentable {
     let key: String
     var url: String?
     var localFile: URL?
     var sourceURL: String?
     var headers: [String: String]?
-    var maxPixel: CGFloat = 400
+    var maxPixel: CGFloat = 1600
     var cornerRadius: CGFloat = 12
 
     func makeUIView(context: Context) -> ThumbnailAnchorView {
@@ -183,7 +256,8 @@ final class ThumbnailAnchorView: UIImageView {
 
         if let localFile {
             Task { @MainActor [weak self] in
-                let request = QLThumbnailGenerator.Request(fileAt: localFile, size: CGSize(width: 240, height: 240),
+                // Large enough to stay sharp across the whole zoom (≈1600px).
+                let request = QLThumbnailGenerator.Request(fileAt: localFile, size: CGSize(width: 800, height: 800),
                                                            scale: 2, representationTypes: .thumbnail)
                 if let rep = try? await QLThumbnailGenerator.shared.generateBestRepresentation(for: request) {
                     self?.image = rep.uiImage

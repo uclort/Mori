@@ -142,10 +142,17 @@ final class MoriUITests: XCTestCase {
         let first = app.descendants(matching: .any)["photo-0"]
         XCTAssertTrue(first.waitForExistence(timeout: 10))
         pause(5)
-        first.tap()
-        pause(2)
+        // Tap close
+        app.descendants(matching: .any)["photo-1"].tap()
+        pause(1.5)
         app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
-        pause(2)
+        pause(1.5)
+        // Pull-down close
+        app.descendants(matching: .any)["photo-4"].tap()
+        pause(1.5)
+        let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.45))
+        start.press(forDuration: 0.05, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.55, dy: 0.8)))
+        pause(1.5)
     }
 
     func test4_SettingsDelete() {        launch(["-moriTab", "settings"])

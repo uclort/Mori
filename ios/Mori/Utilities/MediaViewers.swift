@@ -1,7 +1,6 @@
 import AVKit
 import JXPhotoBrowser
 import Kingfisher
-import QuickLookThumbnailing
 import SwiftUI
 import UIKit
 
@@ -15,6 +14,7 @@ struct BrowserPhoto {
 }
 
 /// Presents JXPhotoBrowser (zoom, swipe, pull-to-dismiss) with Kingfisher-backed loading.
+/// Opening zooms out of the tapped thumbnail, closing flies back into it.
 @MainActor
 final class PhotoBrowserPresenter: NSObject, JXPhotoBrowserDelegate {
     /// The browser only keeps a weak delegate — retain the active presenter here.
@@ -36,7 +36,7 @@ final class PhotoBrowserPresenter: NSObject, JXPhotoBrowserDelegate {
         let browser = MoriPhotoBrowserViewController()
         browser.delegate = presenter
         browser.initialIndex = min(max(0, index), photos.count - 1)
-        // Zoom out of / back into the tapped thumbnail (fades to black underneath).
+        // .zoom also makes the library hide the matching grid thumbnail while browsing.
         browser.transitionType = .zoom
         browser.isLoopingEnabled = false
         browser.itemSpacing = 20
@@ -53,13 +53,11 @@ final class PhotoBrowserPresenter: NSObject, JXPhotoBrowserDelegate {
                                   at indexPath: IndexPath) -> JXPhotoBrowserAnyCell {
         MainActor.assumeIsolated {
             let cell = browser.dequeueReusableCell(withReuseIdentifier: JXZoomImageCell.reuseIdentifier, for: indexPath)
-            // Seed the cell with the same image the zoom starts from, so the
-            // transition's end frame (computed from this image's aspect) is
-            // exact and there is no jump or blank frame when it finishes.
-            if let zoom = cell as? JXZoomImageCell, photos.indices.contains(index),
-               let anchor = ThumbnailAnchorRegistry.shared.view(for: photos[index].url) as? UIImageView,
-               let image = anchor.image {
-                zoom.imageView.image = image
+            // Seed synchronously with the best image we already have (full image from
+            // memory cache, else the on-screen thumbnail). The zoom transition reads
+            // this image's aspect for its end frame, so it lands exactly.
+            if let zoom = cell as? JXZoomImageCell, photos.indices.contains(index) {
+                zoom.imageView.image = cachedImage(at: index)
             }
             return cell
         }
@@ -70,216 +68,355 @@ final class PhotoBrowserPresenter: NSObject, JXPhotoBrowserDelegate {
             guard let cell = cell as? JXZoomImageCell, photos.indices.contains(index) else { return }
             let photo = photos[index]
             guard let source = ImageLoader.source(for: photo.url) else { return }
-            // The cell was seeded with a screen-sized copy already — only show
-            // a spinner when there was nothing to show.
+            if cell.imageView.image == nil { cell.imageView.image = cachedImage(at: index) }
             cell.imageView.kf.indicatorType = cell.imageView.image == nil ? .activity : .none
             cell.imageView.kf.setImage(
                 with: source,
-                options: [.requestModifier(ImageLoader.modifier(for: photo.url, sourceURL: photo.sourceURL, headers: photo.headers))]
+                options: [
+                    .requestModifier(ImageLoader.modifier(for: photo.url, sourceURL: photo.sourceURL, headers: photo.headers)),
+                    // Never blank the seeded image while the full one loads.
+                    .keepCurrentImageWhileLoading,
+                    .backgroundDecode,
+                ]
             ) { [weak cell] result in
-                if case .failure = result, let proxy = ImageLoader.proxyURL(for: photo.url) {
-                    cell?.imageView.kf.setImage(with: proxy) { [weak cell] _ in cell?.setNeedsLayout() }
+                if case .failure(let error) = result, !error.isTaskCancelled,
+                   let proxy = ImageLoader.proxyURL(for: photo.url) {
+                    cell?.imageView.kf.setImage(with: proxy, options: [.keepCurrentImageWhileLoading]) { [weak cell] _ in
+                        cell?.setNeedsLayout()
+                    }
                 }
                 cell?.setNeedsLayout()
             }
         }
     }
 
-    /// View the zoom transition starts from and returns to: the SwiftUI
-    /// thumbnail registered by the grid cell for this photo. It already holds
-    /// a screen-resolution copy of the photo, so the expanded view is sharp.
     nonisolated func photoBrowser(_ browser: JXPhotoBrowserViewController, thumbnailViewAt index: Int) -> UIView? {
         MainActor.assumeIsolated {
             guard photos.indices.contains(index) else { return nil }
-            return ThumbnailAnchorRegistry.shared.view(for: photos[index].url)
+            return ZoomThumbnailRegistry.shared.view(for: photos[index].url)
         }
     }
+
+    private func cachedImage(at index: Int) -> UIImage? {
+        let photo = photos[index]
+        if let key = ImageLoader.source(for: photo.url)?.cacheKey,
+           let full = ImageCache.default.retrieveImageInMemoryCache(forKey: key) {
+            return full
+        }
+        return ZoomThumbnailRegistry.shared.view(for: photo.url)?.image
+    }
 }
+
+// MARK: - Zoom transition
 
 private final class MoriPhotoBrowserViewController: JXPhotoBrowserViewController {
+    override func animationController(forPresented presented: UIViewController, presenting: UIViewController,
+                                      source: UIViewController) -> UIViewControllerAnimatedTransitioning? {
+        transitionType == .zoom ? PhotoZoomPresentAnimator()
+            : super.animationController(forPresented: presented, presenting: presenting, source: source)
+    }
+
     override func animationController(forDismissed dismissed: UIViewController) -> UIViewControllerAnimatedTransitioning? {
-        guard transitionType == .zoom else {
-            return super.animationController(forDismissed: dismissed)
-        }
-        return MoriPhotoDismissAnimator()
+        transitionType == .zoom ? PhotoZoomDismissAnimator()
+            : super.animationController(forDismissed: dismissed)
     }
 }
 
-/// Shrinks the full-screen image back into the thumbnail. The last 40% of the
-/// flight cross-fades the zooming copy into the thumbnail, so the image never
-/// pops away when it reaches the original frame.
-private final class MoriPhotoDismissAnimator: NSObject, UIViewControllerAnimatedTransitioning {
-    func transitionDuration(using ctx: UIViewControllerContextTransitioning?) -> TimeInterval { 0.3 }
+private extension JXPhotoBrowserViewController {
+    /// The on-screen grid thumbnail for the current page, if it is actually visible.
+    func visibleThumbnail(in container: UIView) -> UIImageView? {
+        guard let thumb = delegate?.photoBrowser(self, thumbnailViewAt: pageIndex) as? UIImageView,
+              thumb.window != nil, thumb.image != nil, thumb.bounds.size != .zero else { return nil }
+        let frame = thumb.convert(thumb.bounds, to: container)
+        return container.bounds.intersects(frame) ? thumb : nil
+    }
+
+    var overlayViews: [UIView] { view.subviews.filter { $0 is JXPhotoBrowserOverlay } }
+}
+
+/// Grows a copy of the tapped thumbnail into the photo's real on-screen frame
+/// while the black backdrop fades in. Corners un-round on the way.
+private final class PhotoZoomPresentAnimator: NSObject, UIViewControllerAnimatedTransitioning {
+    func transitionDuration(using ctx: UIViewControllerContextTransitioning?) -> TimeInterval { 0.36 }
 
     func animateTransition(using ctx: UIViewControllerContextTransitioning) {
-        let duration = transitionDuration(using: ctx)
-        guard let browser = ctx.viewController(forKey: .from) as? JXPhotoBrowserViewController,
-              let fromView = ctx.view(forKey: .from) else {
+        guard let browser = ctx.viewController(forKey: .to) as? JXPhotoBrowserViewController else {
             ctx.completeTransition(false)
             return
         }
         let container = ctx.containerView
+        let toView = ctx.view(forKey: .to) ?? browser.view!
+        let duration = transitionDuration(using: ctx)
+        container.addSubview(toView)
+        toView.frame = ctx.finalFrame(for: browser)
+        toView.layoutIfNeeded()
+        browser.scrollToInitialIndexIfNeeded()
+        browser.collectionView.layoutIfNeeded()
+        (browser.visibleCell() as? UIView)?.layoutIfNeeded()
+
+        let overlays = browser.overlayViews
+        guard let thumb = browser.visibleThumbnail(in: container),
+              let target = browser.visibleCell()?.transitionImageView,
+              let image = target.image ?? thumb.image else {
+            toView.alpha = 0
+            UIView.animate(withDuration: 0.25, animations: { toView.alpha = 1 }) { _ in
+                ctx.completeTransition(!ctx.transitionWasCancelled)
+            }
+            return
+        }
+
+        let startFrame = thumb.convert(thumb.bounds, to: container)
+        let endFrame: CGRect
+        if target.bounds.size != .zero {
+            endFrame = target.convert(target.bounds, to: container)
+        } else {
+            endFrame = AVMakeRect(aspectRatio: image.size, insideRect: container.bounds)
+        }
+
+        let zoom = UIImageView(image: image)
+        zoom.contentMode = .scaleAspectFill
+        zoom.clipsToBounds = true
+        zoom.layer.cornerCurve = .continuous
+        zoom.layer.cornerRadius = thumb.layer.cornerRadius
+        zoom.frame = startFrame
+        container.addSubview(zoom)
+
+        // The real thumbnail vanishes so only one image is moving.
+        thumb.alpha = 0
+        target.isHidden = true
+        let backdrop = toView.backgroundColor ?? .black
+        toView.backgroundColor = backdrop.withAlphaComponent(0)
+        overlays.forEach { $0.alpha = 0 }
+
+        UIView.animate(withDuration: duration, delay: 0, usingSpringWithDamping: 0.9, initialSpringVelocity: 0,
+                       options: [.allowUserInteraction]) {
+            zoom.frame = endFrame
+            zoom.layer.cornerRadius = 0
+        } completion: { _ in
+            target.isHidden = false
+            zoom.removeFromSuperview()
+            // Covered by the opaque browser now; the library hides it via isHidden in viewDidAppear.
+            thumb.alpha = 1
+            ctx.completeTransition(!ctx.transitionWasCancelled)
+        }
+        UIView.animate(withDuration: duration * 0.8, delay: 0, options: [.curveEaseOut]) {
+            toView.backgroundColor = backdrop
+        }
+        UIView.animate(withDuration: duration * 0.6, delay: duration * 0.4, options: [.curveEaseOut]) {
+            overlays.forEach { $0.alpha = 1 }
+        }
+    }
+}
+
+/// Flies the current photo back into its grid thumbnail. Over the last 40% the
+/// flying copy cross-fades into the real thumbnail, so nothing pops at the end.
+private final class PhotoZoomDismissAnimator: NSObject, UIViewControllerAnimatedTransitioning {
+    func transitionDuration(using ctx: UIViewControllerContextTransitioning?) -> TimeInterval { 0.32 }
+
+    func animateTransition(using ctx: UIViewControllerContextTransitioning) {
+        guard let browser = ctx.viewController(forKey: .from) as? JXPhotoBrowserViewController,
+              let fromView = ctx.view(forKey: .from) ?? browser.view else {
+            ctx.completeTransition(false)
+            return
+        }
+        let container = ctx.containerView
+        let duration = transitionDuration(using: ctx)
         if let toView = ctx.view(forKey: .to) {
             container.insertSubview(toView, belowSubview: fromView)
             toView.layoutIfNeeded()
         }
 
-        // No visible thumbnail (deleted, scrolled away, still loading): plain fade.
-        guard let source = browser.visibleCell()?.transitionImageView, source.bounds.size != .zero,
-              let thumbnail = browser.delegate?.photoBrowser(browser, thumbnailViewAt: browser.pageIndex) as? UIImageView,
-              thumbnail.window != nil else {
-            UIView.animate(withDuration: duration, animations: { fromView.alpha = 0 }) { _ in
-                MainActor.assumeIsolated {
-                    let finished = !ctx.transitionWasCancelled
-                    if !finished { fromView.alpha = 1 } else { fromView.removeFromSuperview() }
-                    ctx.completeTransition(finished)
-                }
+        guard let source = browser.visibleCell()?.transitionImageView, source.image != nil,
+              source.bounds.size != .zero,
+              let thumb = browser.visibleThumbnail(in: container) else {
+            UIView.animate(withDuration: 0.25, animations: { fromView.alpha = 0 }) { _ in
+                let finished = !ctx.transitionWasCancelled
+                if finished { fromView.removeFromSuperview() } else { fromView.alpha = 1 }
+                ctx.completeTransition(finished)
             }
             return
         }
 
-        let zoomView = UIImageView(image: source.image)
-        zoomView.contentMode = source.contentMode
-        zoomView.clipsToBounds = true
-        zoomView.layer.cornerRadius = source.layer.cornerRadius
-        zoomView.frame = source.convert(source.bounds, to: container)
-        container.addSubview(zoomView)
+        // Includes the pull-down drag transform, so the flight starts where the finger left it.
+        let startFrame = source.convert(source.bounds, to: container)
+        let endFrame = thumb.convert(thumb.bounds, to: container)
+        let zoom = UIImageView(image: source.image)
+        zoom.contentMode = .scaleAspectFill
+        zoom.clipsToBounds = true
+        zoom.layer.cornerCurve = .continuous
+        zoom.frame = startFrame
+        container.addSubview(zoom)
 
         source.isHidden = true
-        thumbnail.alpha = 0
-        thumbnail.isHidden = false
-        let endFrame = thumbnail.convert(thumbnail.bounds, to: container)
+        thumb.alpha = 0
+        thumb.isHidden = false
 
         UIView.animateKeyframes(
-            withDuration: duration,
-            delay: 0,
+            withDuration: duration, delay: 0,
             options: UIView.KeyframeAnimationOptions(rawValue: UIView.AnimationOptions.curveEaseOut.rawValue)
         ) {
             UIView.addKeyframe(withRelativeStartTime: 0, relativeDuration: 1) {
-                zoomView.frame = endFrame
-                zoomView.layer.cornerRadius = thumbnail.layer.cornerRadius
+                zoom.frame = endFrame
+                zoom.layer.cornerRadius = thumb.layer.cornerRadius
                 fromView.alpha = 0
             }
             UIView.addKeyframe(withRelativeStartTime: 0.6, relativeDuration: 0.4) {
-                zoomView.alpha = 0
-                thumbnail.alpha = 1
+                zoom.alpha = 0
+                thumb.alpha = 1
             }
         } completion: { _ in
-            MainActor.assumeIsolated {
-                zoomView.removeFromSuperview()
-                source.isHidden = false
-                thumbnail.alpha = 1
-                let finished = !ctx.transitionWasCancelled
-                if finished {
-                    fromView.removeFromSuperview()
-                } else {
-                    fromView.alpha = 1
-                }
-                ctx.completeTransition(finished)
-            }
+            zoom.removeFromSuperview()
+            source.isHidden = false
+            thumb.alpha = 1
+            let finished = !ctx.transitionWasCancelled
+            if finished { fromView.removeFromSuperview() } else { fromView.alpha = 1 }
+            ctx.completeTransition(finished)
         }
     }
 }
 
-// MARK: - Thumbnail anchors
+// MARK: - Zoomable thumbnails
 
-/// Keeps the live thumbnail views so JXPhotoBrowser can compute the zoom
-/// transition's start/end frames from the actual grid cell.
+/// Live grid thumbnails keyed by photo URL, so the browser can find the exact
+/// view the user tapped (and hide it / fly back into it).
 @MainActor
-final class ThumbnailAnchorRegistry {
-    static let shared = ThumbnailAnchorRegistry()
+final class ZoomThumbnailRegistry {
+    static let shared = ZoomThumbnailRegistry()
 
-    private struct WeakView { weak var view: UIView? }
+    private struct WeakView { weak var view: ZoomThumbnailImageView? }
     private var views: [String: WeakView] = [:]
 
-    func register(_ view: UIView, for key: String) { views[key] = WeakView(view: view) }
+    func register(_ view: ZoomThumbnailImageView, for key: String) { views[key] = WeakView(view: view) }
 
-    func unregister(_ view: UIView, for key: String) {
+    func unregister(_ view: ZoomThumbnailImageView, for key: String) {
         if views[key]?.view === view { views.removeValue(forKey: key) }
     }
 
-    func view(for key: String) -> UIView? { views[key]?.view }
-}
-
-/// Invisible-in-place copy of a cell's thumbnail. It sits behind the SwiftUI
-/// image (which always stays visible, so nothing flashes while the zoom
-/// transition restores), and gives the browser a real UIView whose image is
-/// already screen-sized — the library copies this image into the zooming view,
-/// so the expansion stays sharp instead of blowing up a 400px thumbnail.
-struct ThumbnailAnchor: UIViewRepresentable {
-    let key: String
-    var url: String?
-    var localFile: URL?
-    var sourceURL: String?
-    var headers: [String: String]?
-    var maxPixel: CGFloat = 1600
-    var cornerRadius: CGFloat = 12
-
-    func makeUIView(context: Context) -> ThumbnailAnchorView {
-        let view = ThumbnailAnchorView()
-        view.contentMode = .scaleAspectFill
-        view.clipsToBounds = true
-        view.layer.cornerCurve = .continuous
-        view.isUserInteractionEnabled = false
-        view.registryKey = key
-        ThumbnailAnchorRegistry.shared.register(view, for: key)
+    /// Only returns thumbnails that actually show a photo.
+    func view(for key: String) -> ZoomThumbnailImageView? {
+        guard let view = views[key]?.view, view.hasPhoto else { return nil }
         return view
     }
+}
 
-    func updateUIView(_ view: ThumbnailAnchorView, context: Context) {
-        view.registryKey = key
-        ThumbnailAnchorRegistry.shared.register(view, for: key)
-        view.layer.cornerRadius = cornerRadius
-        view.load(url: url, localFile: localFile, sourceURL: sourceURL, headers: headers, maxPixel: maxPixel)
+final class ZoomThumbnailImageView: UIImageView {
+    var hasPhoto = false
+}
+
+/// A grid thumbnail drawn by a real UIImageView (Kingfisher). This is the very
+/// view the user sees, so the photo browser zooms out of it, hides it while
+/// browsing and flies back into it — exactly like the Photos app.
+struct ZoomThumbnail: UIViewRepresentable {
+    /// Must equal `BrowserPhoto.url` of the page this thumbnail represents.
+    let key: String
+    /// Image to display (may be a dedicated thumbnail URL).
+    let url: String
+    var sourceURL: String?
+    var headers: [String: String]?
+    var maxPixel: CGFloat = 400
+    var cornerRadius: CGFloat = 12
+
+    func makeUIView(context: Context) -> ZoomThumbnailContainer { ZoomThumbnailContainer() }
+
+    func updateUIView(_ view: ZoomThumbnailContainer, context: Context) {
+        view.configure(key: key, url: url, sourceURL: sourceURL, headers: headers,
+                       maxPixel: maxPixel, cornerRadius: cornerRadius)
     }
 
-    static func dismantleUIView(_ view: ThumbnailAnchorView, coordinator: ()) {
-        ThumbnailAnchorRegistry.shared.unregister(view, for: view.registryKey)
+    static func dismantleUIView(_ view: ZoomThumbnailContainer, coordinator: ()) {
+        ZoomThumbnailRegistry.shared.unregister(view.imageView, for: view.key)
+        view.imageView.kf.cancelDownloadTask()
     }
 }
 
-final class ThumbnailAnchorView: UIImageView {
-    var registryKey = ""
-    private var loadedKey = ""
+final class ZoomThumbnailContainer: UIView {
+    let imageView = ZoomThumbnailImageView()
+    private let placeholderIcon = UIImageView(image: UIImage(systemName: "photo"))
+    private(set) var key = ""
+    private var loadedURL = ""
 
-    func load(url: String?, localFile: URL?, sourceURL: String?, headers: [String: String]?, maxPixel: CGFloat) {
-        let key: String
-        if let localFile {
-            key = "file:\(localFile.absoluteString)"
-        } else if let url, !url.isEmpty {
-            key = "net:\(url)#\(Int(maxPixel))"
-        } else {
-            return
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        clipsToBounds = true
+        layer.cornerCurve = .continuous
+        backgroundColor = .tertiarySystemFill
+        placeholderIcon.tintColor = .secondaryLabel
+        placeholderIcon.contentMode = .center
+        placeholderIcon.isHidden = true
+        placeholderIcon.frame = bounds
+        placeholderIcon.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        addSubview(placeholderIcon)
+        imageView.contentMode = .scaleAspectFill
+        imageView.clipsToBounds = true
+        imageView.layer.cornerCurve = .continuous
+        imageView.isUserInteractionEnabled = false
+        imageView.frame = bounds
+        imageView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        addSubview(imageView)
+        isUserInteractionEnabled = false
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    func configure(key: String, url: String, sourceURL: String?, headers: [String: String]?,
+                   maxPixel: CGFloat, cornerRadius: CGFloat) {
+        layer.cornerRadius = cornerRadius
+        imageView.layer.cornerRadius = cornerRadius
+        if key != self.key {
+            ZoomThumbnailRegistry.shared.unregister(imageView, for: self.key)
+            self.key = key
         }
-        guard key != loadedKey else { return }
-        loadedKey = key
+        ZoomThumbnailRegistry.shared.register(imageView, for: key)
+        guard url != loadedURL else { return }
+        loadedURL = url
+        imageView.hasPhoto = false
+        imageView.image = nil
+        placeholderIcon.isHidden = true
+        backgroundColor = .tertiarySystemFill
+        guard let source = ImageLoader.source(for: url) else { return failed() }
 
-        if let localFile {
-            Task { @MainActor [weak self] in
-                // Large enough to stay sharp across the whole zoom (≈1600px).
-                let request = QLThumbnailGenerator.Request(fileAt: localFile, size: CGSize(width: 800, height: 800),
-                                                           scale: 2, representationTypes: .thumbnail)
-                if let rep = try? await QLThumbnailGenerator.shared.generateBestRepresentation(for: request) {
-                    self?.image = rep.uiImage
-                }
-            }
-            return
-        }
-
-        guard let url, let source = ImageLoader.source(for: url) else { return }
-        kf.setImage(
+        imageView.kf.indicatorType = .activity
+        imageView.kf.setImage(
             with: source,
             options: [
                 .requestModifier(ImageLoader.modifier(for: url, sourceURL: sourceURL, headers: headers)),
                 .processor(DownsamplingImageProcessor(size: CGSize(width: maxPixel, height: maxPixel))),
                 .scaleFactor(UIScreen.main.scale),
                 .cacheOriginalImage,
+                .backgroundDecode,
+                .transition(.fade(0.2)),
             ]
         ) { [weak self] result in
-            if case .failure = result, let proxy = ImageLoader.proxyURL(for: url) {
-                self?.kf.setImage(with: proxy)
+            guard let self, self.loadedURL == url else { return }
+            switch result {
+            case .success:
+                self.loaded()
+            case .failure(let error):
+                guard !error.isTaskCancelled else { return }
+                guard let proxy = ImageLoader.proxyURL(for: url) else { return self.failed() }
+                self.imageView.kf.setImage(with: proxy, options: [
+                    .processor(DownsamplingImageProcessor(size: CGSize(width: maxPixel, height: maxPixel))),
+                    .scaleFactor(UIScreen.main.scale),
+                    .transition(.fade(0.2)),
+                ]) { [weak self] result in
+                    guard let self, self.loadedURL == url else { return }
+                    if case .success = result { self.loaded() } else { self.failed() }
+                }
             }
         }
+    }
+
+    private func loaded() {
+        imageView.hasPhoto = true
+        // While the browser shows this photo the image view is hidden: leave an
+        // empty slot (like Photos), not a grey box.
+        backgroundColor = .clear
+        placeholderIcon.isHidden = true
+    }
+
+    private func failed() {
+        imageView.hasPhoto = false
+        placeholderIcon.isHidden = false
     }
 }
 
@@ -390,3 +527,4 @@ extension UIApplication {
         return top
     }
 }
+

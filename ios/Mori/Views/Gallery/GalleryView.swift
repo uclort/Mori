@@ -265,8 +265,15 @@ private struct GalleryCell: View {
     var body: some View {
         Color.clear
             .aspectRatio(1, contentMode: .fit)
-            .background(ThumbnailAnchor(key: file.url.absoluteString, localFile: file.url, cornerRadius: 6))
-            .overlay(FileThumbnail(file: file))
+            .overlay {
+                if file.kind == .photo {
+                    // Same view the photo browser zooms out of / back into.
+                    ZoomThumbnail(key: file.url.absoluteString, url: file.url.absoluteString,
+                                  maxPixel: 300, cornerRadius: 6)
+                } else {
+                    FileThumbnail(file: file)
+                }
+            }
             .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
             .overlay(alignment: .bottomLeading) {
                 if file.kind != .photo {

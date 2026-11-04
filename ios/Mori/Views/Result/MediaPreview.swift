@@ -45,15 +45,11 @@ struct PhotoGridCell: View {
     var body: some View {
         Color.clear
             .aspectRatio(3 / 4, contentMode: .fit)
-            .background(
-                // Lets the photo browser zoom out of this exact cell, using a
-                // screen-sized copy of the real photo (not the 400px thumbnail).
-                ThumbnailAnchor(key: item.url, url: item.url,
-                                sourceURL: result.sourceUrl, headers: item.headers,
-                                maxPixel: 1600, cornerRadius: 12)
-            )
             .overlay(
-                RemoteImage(url: item.thumbnail ?? item.url, sourceURL: result.sourceUrl, headers: item.headers, maxPixel: 400)
+                // UIKit-backed so the photo browser zooms out of / back into this exact view.
+                ZoomThumbnail(key: item.url, url: item.thumbnail ?? item.url,
+                              sourceURL: result.sourceUrl, headers: item.headers,
+                              maxPixel: 400, cornerRadius: 12)
             )
             .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
             .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))

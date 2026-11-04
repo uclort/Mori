@@ -14,6 +14,7 @@ struct SettingsView: View {
     @State private var lockError: String?
     @State private var cacheSize: UInt?
     @State private var clearingCache = false
+    @State private var folderError: String?
 
     var body: some View {
         NavigationStack {
@@ -50,10 +51,30 @@ struct SettingsView: View {
                 LabeledContent("Simultaneous downloads", value: "\(settings.concurrentDownloads)")
             }
             Toggle("Auto-download first option", isOn: $settings.autoDownload)
+            Button(action: openDownloadFolder) {
+                Label("Open in Files", systemImage: "folder")
+            }
+            .alert("Error", isPresented: Binding(get: { folderError != nil }, set: { if !$0 { folderError = nil } })) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(folderError ?? "")
+            }
         } header: {
             Text("Download")
         } footer: {
             Text("PDFs and audio always stay in Files. Files are visible in the Files app under On My iPhone › Mori.")
+        }
+    }
+
+    /// iOS has no public deep link to a specific folder, so this is the closest
+    /// we get: open the Files app, where the download folder lives.
+    private func openDownloadFolder() {
+        guard let url = URL(string: "shareddocuments://") else { return }
+        UIApplication.shared.open(url, options: [:]) { opened in
+            guard !opened else { return }
+            DispatchQueue.main.async {
+                folderError = String(localized: "The Files app could not be opened. Open it manually and look under On My iPhone › Mori.")
+            }
         }
     }
 

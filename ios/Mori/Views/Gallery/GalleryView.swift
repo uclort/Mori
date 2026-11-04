@@ -58,6 +58,7 @@ struct GalleryView: View {
                             .foregroundStyle(.secondary)
                         Spacer()
                     }
+                    .padding(.leading, 4)
 
                     if visible.isEmpty && !library.isLoading {
                         EmptyStateView(systemImage: "photo.on.rectangle.angled", title: "Nothing here yet",
@@ -264,6 +265,7 @@ private struct GalleryCell: View {
     var body: some View {
         Color.clear
             .aspectRatio(1, contentMode: .fit)
+            .background(ThumbnailAnchor(key: file.url.absoluteString, localFile: file.url, cornerRadius: 6))
             .overlay(FileThumbnail(file: file))
             .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
             .overlay(alignment: .bottomLeading) {

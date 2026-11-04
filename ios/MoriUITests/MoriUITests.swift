@@ -48,9 +48,15 @@ final class MoriUITests: XCTestCase {
         // Corner download button on the 2nd photo
         let downloadButtons = app.buttons.matching(identifier: "photo-download")
         if downloadButtons.count > 1 { downloadButtons.element(boundBy: 1).tap() }
-        pause(3)
+        pause(0.6)
         shot("result_grid_downloading")
+        pause(0.6)
+        shot("result_grid_downloaded_check")
+        pause(2.5)
+        shot("result_grid_download_reverted")
         first.tap()
+        pause(0.12)
+        shot("photo_browser_zoom")
         pause(3)
         shot("photo_browser")
         let dl = app.buttons["下载"].firstMatch
@@ -62,6 +68,7 @@ final class MoriUITests: XCTestCase {
     func test3_GalleryDelete() {
         launch(["-moriTab", "gallery"])
         pause(3)
+        shot("gallery_top")
         let cells = app.descendants(matching: .any).matching(identifier: "gallery-cell")
         guard cells.count >= 2 else { return XCTFail("gallery needs files") }
         // Long-press → context menu → delete → confirmation anchored to the cell
@@ -95,9 +102,46 @@ final class MoriUITests: XCTestCase {
         shot("gallery_selection_delete_confirm")
     }
 
-    func test4_SettingsDelete() {
+    /// The home toolbar indicator must flip back to the download icon as soon as
+    /// the queue empties (child item changes used to be swallowed).
+    func test5_HomeToolbar() {
+        launch(["-moriTestURL", "demo:photos"])
+        let all = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "下载全部")).firstMatch
+        XCTAssertTrue(all.waitForExistence(timeout: 10))
+        pause(3)
+        all.tap()
+        pause(0.25)
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+        pause(0.2)
+        shot("home_toolbar_downloading")
+        pause(1.2)
+        shot("home_toolbar_mid")
+        pause(8)
+        shot("home_toolbar_8s")
+        pause(12)
+        shot("home_toolbar_20s")
+        app.navigationBars.buttons.firstMatch.tap()
+        pause(1.5)
+        shot("downloads_sheet")
+    }
+
+    /// "Open in Files" should leave the app for the Files app (or explain why not).
+    func test6_OpenInFiles() {
         launch(["-moriTab", "settings"])
         pause(2)
+        let folderButton = app.buttons["在「文件」中打开"]
+        XCTAssertTrue(folderButton.waitForExistence(timeout: 5))
+        folderButton.tap()
+        pause(3)
+        shot("files_app")
+    }
+
+    func test4_SettingsDelete() {        launch(["-moriTab", "settings"])
+        pause(2)
+        shot("settings_top")
+        let folderButton = app.buttons["在「文件」中打开"]
+        if !folderButton.waitForExistence(timeout: 2) { app.swipeUp() }
+        shot("settings_download_section")
         let button = app.buttons["删除全部已下载文件"]
         var tries = 0
         while !button.isHittable && tries < 8 { app.swipeUp(); tries += 1 }

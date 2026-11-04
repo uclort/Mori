@@ -36,8 +36,12 @@ final class DownloadItem: ObservableObject, Identifiable {
     let id = UUID().uuidString
     let request: DownloadRequest
     let createdAt = Date()
-    @Published var status: Status = .queued
-    @Published var progress: Double = 0
+    /// Called right before any observable change so the owning manager can
+    /// forward it — `DownloadManager.items` alone does not publish when a
+    /// child item's status/progress changes.
+    var onChange: (() -> Void)?
+    @Published var status: Status = .queued { willSet { onChange?() } }
+    @Published var progress: Double = 0 { willSet { onChange?() } }
     @Published var detail: String = ""
     @Published var fileURL: URL?
     @Published var savedToPhotos = false
@@ -78,6 +82,7 @@ final class DownloadManager: ObservableObject {
     func start(_ request: DownloadRequest) -> DownloadItem {
         if let existing = item(for: request.url), existing.status.isActive { return existing }
         let item = DownloadItem(request: request)
+        item.onChange = { [weak self] in self?.objectWillChange.send() }
         items.append(item)
         item.task = Task { [weak self] in
             await self?.run(item)

@@ -186,3 +186,7 @@
 "No files selected" = "未选择文件";
 "%lld selected" = "已选择 %lld 项";
 "Actions" = "操作";
+
+/* v5.2 */
+"Open in Files" = "在「文件」中打开";
+"The Files app could not be opened. Open it manually and look under On My iPhone › Mori." = "无法打开「文件」App，请手动打开并前往「我的 iPhone › Mori」。";

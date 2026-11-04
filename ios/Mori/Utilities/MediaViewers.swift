@@ -1,6 +1,7 @@
 import AVKit
 import JXPhotoBrowser
 import Kingfisher
+import QuickLookThumbnailing
 import SwiftUI
 import UIKit
 
@@ -32,10 +33,11 @@ final class PhotoBrowserPresenter: NSObject, JXPhotoBrowserDelegate {
         let presenter = PhotoBrowserPresenter(photos: photos, onDownload: onDownload)
         active = presenter
 
-        let browser = JXPhotoBrowserViewController()
+        let browser = MoriPhotoBrowserViewController()
         browser.delegate = presenter
         browser.initialIndex = min(max(0, index), photos.count - 1)
-        browser.transitionType = .fade
+        // Zoom out of / back into the tapped thumbnail (fades to black underneath).
+        browser.transitionType = .zoom
         browser.isLoopingEnabled = false
         browser.itemSpacing = 20
         if photos.count > 1 { browser.addOverlay(JXPageIndicatorOverlay()) }
@@ -68,6 +70,140 @@ final class PhotoBrowserPresenter: NSObject, JXPhotoBrowserDelegate {
                     cell?.imageView.kf.setImage(with: proxy) { [weak cell] _ in cell?.setNeedsLayout() }
                 }
                 cell?.setNeedsLayout()
+            }
+        }
+    }
+
+    /// View the zoom transition starts from and returns to: the SwiftUI
+    /// thumbnail registered by the grid cell for this photo.
+    nonisolated func photoBrowser(_ browser: JXPhotoBrowserViewController, thumbnailViewAt index: Int) -> UIView? {
+        MainActor.assumeIsolated {
+            guard photos.indices.contains(index) else { return nil }
+            return ThumbnailAnchorRegistry.shared.view(for: photos[index].url)
+        }
+    }
+}
+
+/// Zoom transition with a slightly longer, softer curve than the library default.
+private final class MoriZoomPresentAnimator: JXZoomPresentAnimator {
+    override func transitionDuration(using ctx: UIViewControllerContextTransitioning?) -> TimeInterval { 0.32 }
+}
+
+private final class MoriZoomDismissAnimator: JXZoomDismissAnimator {
+    override func transitionDuration(using ctx: UIViewControllerContextTransitioning?) -> TimeInterval { 0.32 }
+}
+
+private final class MoriPhotoBrowserViewController: JXPhotoBrowserViewController {
+    override func animationController(forPresented presented: UIViewController, presenting: UIViewController,
+                                      source: UIViewController) -> UIViewControllerAnimatedTransitioning? {
+        guard transitionType == .zoom else {
+            return super.animationController(forPresented: presented, presenting: presenting, source: source)
+        }
+        return MoriZoomPresentAnimator()
+    }
+
+    override func animationController(forDismissed dismissed: UIViewController) -> UIViewControllerAnimatedTransitioning? {
+        guard transitionType == .zoom else {
+            return super.animationController(forDismissed: dismissed)
+        }
+        return MoriZoomDismissAnimator()
+    }
+}
+
+// MARK: - Thumbnail anchors
+
+/// Keeps the live thumbnail views so JXPhotoBrowser can compute the zoom
+/// transition's start/end frames from the actual grid cell.
+@MainActor
+final class ThumbnailAnchorRegistry {
+    static let shared = ThumbnailAnchorRegistry()
+
+    private struct WeakView { weak var view: UIView? }
+    private var views: [String: WeakView] = [:]
+
+    func register(_ view: UIView, for key: String) { views[key] = WeakView(view: view) }
+
+    func unregister(_ view: UIView, for key: String) {
+        if views[key]?.view === view { views.removeValue(forKey: key) }
+    }
+
+    func view(for key: String) -> UIView? { views[key]?.view }
+}
+
+/// Invisible-in-place copy of a cell's thumbnail. It sits behind the SwiftUI
+/// image (which always stays visible, so nothing flashes while the zoom
+/// transition restores), and gives the browser a real UIView with a ready image.
+struct ThumbnailAnchor: UIViewRepresentable {
+    let key: String
+    var url: String?
+    var localFile: URL?
+    var sourceURL: String?
+    var headers: [String: String]?
+    var maxPixel: CGFloat = 400
+    var cornerRadius: CGFloat = 12
+
+    func makeUIView(context: Context) -> ThumbnailAnchorView {
+        let view = ThumbnailAnchorView()
+        view.contentMode = .scaleAspectFill
+        view.clipsToBounds = true
+        view.layer.cornerCurve = .continuous
+        view.isUserInteractionEnabled = false
+        view.registryKey = key
+        ThumbnailAnchorRegistry.shared.register(view, for: key)
+        return view
+    }
+
+    func updateUIView(_ view: ThumbnailAnchorView, context: Context) {
+        view.registryKey = key
+        ThumbnailAnchorRegistry.shared.register(view, for: key)
+        view.layer.cornerRadius = cornerRadius
+        view.load(url: url, localFile: localFile, sourceURL: sourceURL, headers: headers, maxPixel: maxPixel)
+    }
+
+    static func dismantleUIView(_ view: ThumbnailAnchorView, coordinator: ()) {
+        ThumbnailAnchorRegistry.shared.unregister(view, for: view.registryKey)
+    }
+}
+
+final class ThumbnailAnchorView: UIImageView {
+    var registryKey = ""
+    private var loadedKey = ""
+
+    func load(url: String?, localFile: URL?, sourceURL: String?, headers: [String: String]?, maxPixel: CGFloat) {
+        let key: String
+        if let localFile {
+            key = "file:\(localFile.absoluteString)"
+        } else if let url, !url.isEmpty {
+            key = "net:\(url)#\(Int(maxPixel))"
+        } else {
+            return
+        }
+        guard key != loadedKey else { return }
+        loadedKey = key
+
+        if let localFile {
+            Task { @MainActor [weak self] in
+                let request = QLThumbnailGenerator.Request(fileAt: localFile, size: CGSize(width: 240, height: 240),
+                                                           scale: 2, representationTypes: .thumbnail)
+                if let rep = try? await QLThumbnailGenerator.shared.generateBestRepresentation(for: request) {
+                    self?.image = rep.uiImage
+                }
+            }
+            return
+        }
+
+        guard let url, let source = ImageLoader.source(for: url) else { return }
+        kf.setImage(
+            with: source,
+            options: [
+                .requestModifier(ImageLoader.modifier(for: url, sourceURL: sourceURL, headers: headers)),
+                .processor(DownsamplingImageProcessor(size: CGSize(width: maxPixel, height: maxPixel))),
+                .scaleFactor(UIScreen.main.scale),
+                .cacheOriginalImage,
+            ]
+        ) { [weak self] result in
+            if case .failure = result, let proxy = ImageLoader.proxyURL(for: url) {
+                self?.kf.setImage(with: proxy)
             }
         }
     }

@@ -11,45 +11,22 @@ struct ResultView: View {
     @State private var pdfProgress: Double?
     @State private var pdfFile: URL?
     @State private var errorMessage: String?
-    @State private var viewer: PhotoViewerState?
-    @State private var player: VideoPlayerState?
 
     var body: some View {
-        List {
-            Section {
-                MediaPreview(result: result, platform: platform, previewItems: previewItems, isSinglePreview: isSinglePreview,
-                             onOpenPhoto: { index in
-                                 viewer = PhotoViewerState(items: previewItems.filter(\.isPhoto), start: index)
-                             },
-                             onPlayVideo: { item in player = VideoPlayerState(item: item) })
-                    .listRowInsets(EdgeInsets())
-                    .listRowBackground(Color.clear)
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                if !isPhotoPost {
+                    MediaPreview(result: result, video: result.downloads.first(where: { !$0.isMirror && $0.isVideo }))
+                }
                 info
+                if result.isMultiItem || galleryImages.count >= 2 { actionsCard }
+                if !photos.isEmpty { photoGrid }
+                if !otherItems.isEmpty { optionsList }
             }
-
-            if result.isMultiItem || galleryImages.count >= 2 {
-                Section {
-                    if result.isMultiItem { downloadAllRow }
-                    if galleryImages.count >= 2 { pdfRow }
-                }
-            }
-
-            Section {
-                ForEach(Array(result.downloads.enumerated()), id: \.element.id) { index, item in
-                    DownloadOptionRow(index: index, item: item, result: result, platform: platform,
-                                      showThumbnail: result.isMultiPhoto && !result.isPlaylistOrAlbum && item.isPhoto,
-                                      onPreview: {
-                                          let photos = result.photoDownloads
-                                          if let i = photos.firstIndex(of: item) {
-                                              viewer = PhotoViewerState(items: photos, start: i)
-                                          }
-                                      })
-                }
-            } header: {
-                Text(result.isPlaylistOrAlbum ? "Tracks" : "Download options")
-            }
+            .padding(.horizontal)
+            .padding(.bottom, 24)
         }
-        .listStyle(.insetGrouped)
+        .background(Color(uiColor: .systemGroupedBackground))
         .navigationTitle(platform?.displayName ?? String(localized: "Result"))
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -68,18 +45,14 @@ struct ResultView: View {
             }
         }
         .sheet(item: pdfFileItem) { (item: IdentifiableURL) in ShareSheet(items: [item.url]) }
-        .fullScreenCover(item: $viewer) { state in
-            PhotoViewer(state: state, result: result, platform: platform)
-        }
-        .fullScreenCover(item: $player) { state in
-            VideoPlayerScreen(item: state.item, sourceURL: result.sourceUrl)
-        }
         .alert("Error", isPresented: Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })) {
             Button("OK", role: .cancel) {}
         } message: {
             Text(errorMessage ?? "")
         }
     }
+
+    // MARK: Sections
 
     private var info: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -98,31 +71,113 @@ struct ResultView: View {
                 }
             }
         }
-        .padding(.vertical, 4)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(14)
+        .background(.background, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
 
-    // MARK: Download all
+    private var actionsCard: some View {
+        VStack(spacing: 0) {
+            if result.isMultiItem {
+                actionRow(title: allTitle,
+                          systemImage: downloadingAll ? "stop.circle" : "arrow.down.circle.fill",
+                          trailing: downloadingAll ? nil : allCountText,
+                          busy: downloadingAll,
+                          action: downloadAll)
+                if let allSummary {
+                    Text(allSummary)
+                        .font(.caption).foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 14).padding(.bottom, 10)
+                }
+            }
+            if result.isMultiItem && galleryImages.count >= 2 { Divider().padding(.leading, 50) }
+            if galleryImages.count >= 2 {
+                actionRow(title: String(localized: "Export as PDF"), systemImage: "doc.richtext",
+                          trailing: pdfProgress == nil ? String(localized: "\(galleryImages.count) pages") : nil,
+                          busy: pdfProgress != nil, action: exportPDF)
+                    .disabled(pdfProgress != nil)
+            }
+        }
+        .background(.background, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+    }
 
-    private var downloadAllRow: some View {
-        Button {
-            downloadAll()
-        } label: {
-            HStack {
-                Label(allTitle, systemImage: downloadingAll ? "stop.circle" : "arrow.down.circle.fill")
+    private func actionRow(title: String, systemImage: String, trailing: String?, busy: Bool,
+                           action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 12) {
+                Image(systemName: systemImage).font(.title3).frame(width: 24)
+                Text(title).font(.subheadline.weight(.medium))
                 Spacer()
-                if downloadingAll {
-                    ProgressView()
-                } else {
-                    Text(result.isMultiPhoto && !result.isPlaylistOrAlbum
-                         ? String(localized: "\(downloadableItems.count) photos")
-                         : String(localized: "\(downloadableItems.count) items"))
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.secondary)
+                if busy { ProgressView() }
+                if let trailing {
+                    Text(trailing).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                }
+            }
+            .padding(14)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(.tint)
+    }
+
+    private var photoGrid: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            sectionHeader(String(localized: "\(photos.count) photos"))
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 3), spacing: 8) {
+                ForEach(Array(photos.enumerated()), id: \.element.id) { index, item in
+                    PhotoGridCell(index: index, item: item, result: result,
+                                  onPreview: { preview(at: index) },
+                                  onDownload: { start(item) })
                 }
             }
         }
-        .footnoteIfNeeded(allSummary)
     }
+
+    private var optionsList: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            sectionHeader(result.isPlaylistOrAlbum ? String(localized: "Tracks")
+                          : (photos.isEmpty ? String(localized: "Download options") : String(localized: "Other formats")))
+            VStack(spacing: 0) {
+                ForEach(Array(otherItems.enumerated()), id: \.element.id) { index, item in
+                    if index > 0 { Divider().padding(.leading, 54) }
+                    DownloadOptionRow(item: item) { start(item) }
+                }
+            }
+            .background(.background, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        }
+    }
+
+    private func sectionHeader(_ text: String) -> some View {
+        Text(text)
+            .font(.footnote.weight(.semibold))
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 4)
+    }
+
+    // MARK: Data
+
+    /// Posts made only of photos get the grid layout without a big header preview.
+    private var isPhotoPost: Bool {
+        !photos.isEmpty && !result.downloads.contains { !$0.isMirror && $0.isVideo }
+    }
+
+    private var isSinglePreview: Bool {
+        [.youtube, .spotify, .applemusic, .bandcamp, .bilibili].contains(platform)
+    }
+
+    private var photos: [MediaDownload] {
+        isSinglePreview ? [] : result.downloads.filter { $0.isPhoto && !$0.isVideo }
+    }
+
+    private var otherItems: [MediaDownload] {
+        let photoIDs = Set(photos.map(\.id))
+        return result.downloads.filter { !photoIDs.contains($0.id) }
+    }
+
+    private var galleryImages: [MediaDownload] { isSinglePreview ? [] : result.galleryImages }
+
+    private var downloadableItems: [MediaDownload] { result.downloads.filter { !$0.isMirror } }
 
     private var allTitle: String {
         if downloadingAll { return String(localized: "Cancel") }
@@ -130,7 +185,26 @@ struct ResultView: View {
             ? String(localized: "Download all photos") : String(localized: "Download all")
     }
 
-    private var downloadableItems: [MediaDownload] { result.downloads.filter { !$0.isMirror } }
+    private var allCountText: String {
+        result.isMultiPhoto && !result.isPlaylistOrAlbum
+            ? String(localized: "\(downloadableItems.count) photos")
+            : String(localized: "\(downloadableItems.count) items")
+    }
+
+    // MARK: Actions
+
+    private func start(_ item: MediaDownload) {
+        downloads.start(DownloadRequest(item: item, title: result.itemTitle(for: item),
+                                        sourceURL: result.sourceUrl, platform: platform))
+    }
+
+    private func preview(at index: Int) {
+        let pages = photos.map { BrowserPhoto(url: $0.url, sourceURL: result.sourceUrl, headers: $0.headers) }
+        let items = photos
+        PhotoBrowserPresenter.present(pages, startAt: index) { i in
+            if items.indices.contains(i) { start(items[i]) }
+        }
+    }
 
     private func downloadAll() {
         if downloadingAll {
@@ -142,8 +216,7 @@ struct ResultView: View {
         downloadingAll = true
         allSummary = nil
         let requests = downloadableItems.map {
-            DownloadRequest(item: $0, title: result.itemTitle(for: $0),
-                            sourceURL: result.sourceUrl, platform: platform)
+            DownloadRequest(item: $0, title: result.itemTitle(for: $0), sourceURL: result.sourceUrl, platform: platform)
         }
         Task {
             let (ok, failed) = await downloads.startAll(requests)
@@ -152,27 +225,6 @@ struct ResultView: View {
                 ? String(localized: "All \(ok) items downloaded")
                 : String(localized: "Downloaded \(ok)/\(requests.count) items (\(failed) failed) — tap failed rows to retry")
         }
-    }
-
-    // MARK: PDF
-
-    private var galleryImages: [MediaDownload] { isSinglePreview ? [] : result.galleryImages }
-
-    private var pdfRow: some View {
-        Button {
-            exportPDF()
-        } label: {
-            HStack {
-                Label("Export as PDF", systemImage: "doc.richtext")
-                Spacer()
-                if let pdfProgress {
-                    ProgressView(value: pdfProgress).frame(width: 60)
-                } else {
-                    Text("\(galleryImages.count) pages").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
-                }
-            }
-        }
-        .disabled(pdfProgress != nil)
     }
 
     private var pdfFileItem: Binding<IdentifiableURL?> {
@@ -194,31 +246,6 @@ struct ResultView: View {
             }
         }
     }
-
-    // MARK: Preview selection (ported from ui/result.js)
-
-    private var isSinglePreview: Bool {
-        [.youtube, .spotify, .applemusic, .bandcamp, .bilibili].contains(platform)
-    }
-
-    private var previewItems: [MediaDownload] {
-        let items = result.downloads.filter { !$0.isMirror }
-        let hasPhoto = items.contains(where: \.isPhoto)
-        let hasVideo = items.contains(where: \.isVideo)
-        switch platform {
-        case .douyin?:
-            return hasPhoto ? items.filter(\.isPhoto) : Array(items.prefix(1))
-        case .bilibili?:
-            return Array(items.prefix(1))
-        case .rednote? where hasVideo:
-            return Array(items.prefix(1))
-        case .twitter?, .tiktok?:
-            return hasPhoto ? items.filter(\.isPhoto) : Array(items.prefix(1))
-        default:
-            // Photo posts show every photo; otherwise one preview is enough (qualities are duplicates)
-            return hasPhoto && !hasVideo ? items.filter(\.isPhoto) : Array(items.prefix(1))
-        }
-    }
 }
 
 struct IdentifiableURL: Identifiable {
@@ -226,55 +253,21 @@ struct IdentifiableURL: Identifiable {
     var id: URL { url }
 }
 
-private extension View {
-    @ViewBuilder
-    func footnoteIfNeeded(_ text: String?) -> some View {
-        if let text {
-            VStack(alignment: .leading, spacing: 4) {
-                self
-                Text(text).font(.caption).foregroundStyle(.secondary)
-            }
-        } else {
-            self
-        }
-    }
-}
-
 // MARK: - Rows
 
+/// Video quality / audio / track row. Only the trailing button starts a download.
 struct DownloadOptionRow: View {
-    let index: Int
     let item: MediaDownload
-    let result: MediaResult
-    let platform: Platform?
-    let showThumbnail: Bool
-    let onPreview: () -> Void
+    let onDownload: () -> Void
 
     @EnvironmentObject private var downloads: DownloadManager
 
     var body: some View {
         let state = downloads.item(for: item.url)
         HStack(spacing: 12) {
-            if showThumbnail {
-                Button(action: onPreview) {
-                    RemoteImage(url: item.thumbnail ?? item.url, sourceURL: result.sourceUrl, maxPixel: 120)
-                        .frame(width: 52, height: 52)
-                        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                        .overlay(alignment: .topLeading) {
-                            Text("\((result.photoDownloads.firstIndex(of: item) ?? index) + 1)")
-                                .font(.caption2.weight(.bold))
-                                .padding(.horizontal, 5)
-                                .background(.ultraThinMaterial, in: Capsule())
-                                .padding(3)
-                        }
-                }
-                .buttonStyle(.plain)
-            } else {
-                Image(systemName: item.kind == .audio ? "music.note" : item.kind == .photo ? "photo" : "film")
-                    .foregroundStyle(.tint)
-                    .frame(width: 28)
-            }
-
+            Image(systemName: item.kind == .audio ? "music.note" : item.kind == .photo ? "photo" : "film")
+                .foregroundStyle(.tint)
+                .frame(width: 28)
             VStack(alignment: .leading, spacing: 2) {
                 if item.isTrack {
                     Text(item.cleanType).font(.subheadline).lineLimit(2)
@@ -290,34 +283,23 @@ struct DownloadOptionRow: View {
             }
             Spacer()
             if let state {
-                DownloadBadge(item: state) { tap(existing: state) }
+                DownloadBadge(item: state) {
+                    switch state.status {
+                    case .failed, .cancelled: downloads.retry(state)
+                    case .completed, .skipped: onDownload()
+                    default: downloads.cancel(state)
+                    }
+                }
             } else {
-                Button {
-                    start()
-                } label: {
+                Button(action: onDownload) {
                     Image(systemName: "arrow.down.circle.fill").font(.title2)
                 }
                 .buttonStyle(.borderless)
                 .accessibilityLabel("Download")
             }
         }
-        .contentShape(Rectangle())
-        .onTapGesture {
-            if let state { tap(existing: state) } else { start() }
-        }
-    }
-
-    private func start() {
-        downloads.start(DownloadRequest(item: item, title: result.itemTitle(for: item),
-                                        sourceURL: result.sourceUrl, platform: platform))
-    }
-
-    private func tap(existing: DownloadItem) {
-        switch existing.status {
-        case .failed, .cancelled: downloads.retry(existing)
-        case .completed, .skipped: start()
-        default: downloads.cancel(existing)
-        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
     }
 }
 
@@ -340,30 +322,61 @@ struct DownloadStatusLine: View {
 
 struct DownloadBadge: View {
     @ObservedObject var item: DownloadItem
+    var compact = false
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
-            switch item.status {
-            case .queued:
-                Image(systemName: "clock").font(.title3).foregroundStyle(.secondary)
-            case .resolving, .downloading, .saving:
-                ZStack {
-                    Circle().stroke(.quaternary, lineWidth: 3)
-                    Circle().trim(from: 0, to: item.progress)
-                        .stroke(.tint, style: StrokeStyle(lineWidth: 3, lineCap: .round))
-                        .rotationEffect(.degrees(-90))
-                    Image(systemName: "stop.fill").font(.system(size: 8))
-                }
-                .frame(width: 24, height: 24)
-            case .completed, .skipped:
-                Image(systemName: "checkmark.circle.fill").font(.title2).foregroundStyle(.green)
-            case .failed:
-                Image(systemName: "arrow.clockwise.circle.fill").font(.title2).foregroundStyle(.red)
-            case .cancelled:
-                Image(systemName: "arrow.down.circle").font(.title2)
-            }
+            if compact { compactBody } else { regularBody }
         }
         .buttonStyle(.borderless)
+    }
+
+    @ViewBuilder
+    private var regularBody: some View {
+        switch item.status {
+        case .queued:
+            Image(systemName: "clock").font(.title3).foregroundStyle(.secondary)
+        case .resolving, .downloading, .saving:
+            ring(color: AnyShapeStyle(.tint)).frame(width: 24, height: 24)
+        case .completed, .skipped:
+            Image(systemName: "checkmark.circle.fill").font(.title2).foregroundStyle(.green)
+        case .failed:
+            Image(systemName: "arrow.clockwise.circle.fill").font(.title2).foregroundStyle(.red)
+        case .cancelled:
+            Image(systemName: "arrow.down.circle").font(.title2)
+        }
+    }
+
+    /// 30pt circle for overlaying on thumbnails.
+    private var compactBody: some View {
+        let symbol: String?
+        let color: Color
+        switch item.status {
+        case .queued: (symbol, color) = ("clock", .gray)
+        case .resolving, .downloading, .saving: (symbol, color) = (nil, .black.opacity(0.55))
+        case .completed, .skipped: (symbol, color) = ("checkmark", .green)
+        case .failed: (symbol, color) = ("arrow.clockwise", .red)
+        case .cancelled: (symbol, color) = ("arrow.down", .accentColor)
+        }
+        return ZStack {
+            Circle().fill(color)
+            if let symbol {
+                Image(systemName: symbol).font(.system(size: 13, weight: .bold)).foregroundStyle(.white)
+            } else {
+                ring(color: AnyShapeStyle(.white)).padding(5).foregroundStyle(.white)
+            }
+        }
+        .frame(width: 30, height: 30)
+    }
+
+    private func ring(color: AnyShapeStyle) -> some View {
+        ZStack {
+            Circle().stroke(.quaternary, lineWidth: 3)
+            Circle().trim(from: 0, to: item.progress)
+                .stroke(color, style: StrokeStyle(lineWidth: 3, lineCap: .round))
+                .rotationEffect(.degrees(-90))
+            Image(systemName: "stop.fill").font(.system(size: 7))
+        }
     }
 }

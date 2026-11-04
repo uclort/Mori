@@ -9,6 +9,7 @@ struct HomeView: View {
     @FocusState private var inputFocused: Bool
     @State private var clipboardHasURL = false
     @State private var showDownloads = false
+    @State private var pasteButtonWidth: CGFloat?
 
     var body: some View {
         NavigationStack(path: $model.path) {
@@ -16,11 +17,8 @@ struct HomeView: View {
                 VStack(alignment: .leading, spacing: 20) {
                     header
                     inputCard
-                    if clipboardHasURL && model.input.isEmpty && !model.isAnalyzing {
-                        clipboardBanner
-                    }
                     statusView
-                    PlatformGrid()
+                    PlatformList()
                 }
                 .padding()
             }
@@ -38,19 +36,6 @@ struct HomeView: View {
         }
         .sheet(isPresented: $showDownloads) { DownloadsView() }
         .sheet(item: $model.batch) { BatchView(session: $0) }
-        .confirmationDialog("Choose Server",
-                            isPresented: Binding(get: { model.serverPrompt != nil },
-                                                 set: { if !$0 { model.serverPrompt = nil } }),
-                            titleVisibility: .visible,
-                            presenting: model.serverPrompt) { prompt in
-            if prompt.sources.count >= 2 {
-                Button("Server 1") { model.choose(source: prompt.sources[0], for: prompt) }
-                Button("Server 2") { model.choose(source: prompt.sources[1], for: prompt) }
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: { prompt in
-            Text(prompt.platform?.serverDescription ?? "")
-        }
         .onChange(of: scenePhase) { phase in
             if phase == .active { detectClipboard() }
         }
@@ -68,100 +53,133 @@ struct HomeView: View {
         .padding(.top, 4)
     }
 
+    // MARK: Input
+
     private var inputCard: some View {
-        VStack(spacing: 12) {
-            HStack(alignment: .top) {
-                Image(systemName: "link")
-                    .foregroundStyle(.secondary)
-                    .padding(.top, 3)
-                TextField("Paste a link — or several for batch mode", text: $model.input, axis: .vertical)
-                    .lineLimit(1...6)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                    .keyboardType(.URL)
-                    .focused($inputFocused)
-                    .submitLabel(.go)
-                    .onSubmit(startAnalyze)
-                if !model.input.isEmpty {
-                    Button {
-                        model.input = ""
-                    } label: {
-                        Image(systemName: "xmark.circle.fill").foregroundStyle(.tertiary)
+        VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 0) {
+                ZStack(alignment: .topLeading) {
+                    if model.input.isEmpty {
+                        Text("Paste or type a link")
+                            .foregroundStyle(.tertiary)
+                            .padding(.top, 8)
+                            .padding(.leading, 5)
+                            .allowsHitTesting(false)
                     }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("Clear")
+                    TextEditor(text: $model.input)
+                        .scrollContentBackground(.hidden)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .keyboardType(.URL)
+                        .focused($inputFocused)
+                        .frame(minHeight: 72, maxHeight: 150)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
+                .font(.callout)
+
+                HStack(spacing: 6) {
+                    Image(systemName: batchCount > 1 ? "square.stack.3d.up.fill" : "info.circle")
+                    Text(hintText)
+                    Spacer(minLength: 0)
+                    if !model.input.isEmpty {
+                        Button {
+                            model.input = ""
+                        } label: {
+                            Image(systemName: "xmark.circle.fill").font(.body)
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(.tertiary)
+                        .accessibilityLabel("Clear")
+                    }
+                }
+                .font(.caption)
+                .foregroundStyle(batchCount > 1 || clipboardHint ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary))
+                .padding(.top, 6)
             }
-            .padding(14)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
             .background(.background, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(.quaternary))
+            .onTapGesture { inputFocused = true }
 
-            HStack(spacing: 12) {
+            HStack(spacing: 10) {
                 PasteButton(payloadType: String.self) { strings in
                     guard let text = strings.first else { return }
-                    Task { @MainActor in
-                        model.input = text
-                        clipboardHasURL = false
-                        if URLExtractor.urls(in: text).count == 1 { model.analyze() }
-                    }
+                    Task { @MainActor in append(text) }
                 }
                 .buttonBorderShape(.capsule)
                 .labelStyle(.titleAndIcon)
+                .controlSize(.regular)
+                .background(GeometryReader { proxy in
+                    Color.clear.preference(key: WidthKey.self, value: proxy.size.width)
+                })
+                .onPreferenceChange(WidthKey.self) { pasteButtonWidth = $0 }
 
                 Spacer(minLength: 0)
 
-                if model.isAnalyzing {
-                    Button(role: .cancel) {
-                        model.cancel()
-                    } label: {
-                        Label("Cancel", systemImage: "stop.fill")
-                            .frame(minWidth: 110)
-                    }
-                    .buttonStyle(.bordered)
-                    .buttonBorderShape(.capsule)
-                    .controlSize(.large)
-                } else {
-                    Button(action: startAnalyze) {
-                        Label(batchCount > 1 ? "Analyze \(batchCount)" : "Analyze", systemImage: "sparkle.magnifyingglass")
-                            .frame(minWidth: 110)
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .buttonBorderShape(.capsule)
-                    .controlSize(.large)
-                    .disabled(model.input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                }
+                analyzeButton
             }
         }
         .padding(14)
         .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
     }
 
+    /// Same size, style and font as the system paste button.
+    @ViewBuilder
+    private var analyzeButton: some View {
+        Group {
+            if model.isAnalyzing {
+                Button(role: .cancel) {
+                    model.cancel()
+                } label: {
+                    Label("Cancel", systemImage: "stop.fill").frame(minWidth: pasteButtonWidth.map { $0 - 28 })
+                }
+                .buttonStyle(.bordered)
+            } else {
+                Button(action: startAnalyze) {
+                    Label("Analyze", systemImage: "sparkle.magnifyingglass")
+                        .frame(minWidth: pasteButtonWidth.map { $0 - 28 })
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(model.input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+        }
+        .buttonBorderShape(.capsule)
+        .controlSize(.regular)
+        // Server choice anchors to the button that started the analysis
+        .confirmationDialog("Choose Server",
+                            isPresented: Binding(get: { model.serverPrompt != nil },
+                                                 set: { if !$0 { model.serverPrompt = nil } }),
+                            titleVisibility: .visible,
+                            presenting: model.serverPrompt) { prompt in
+            if prompt.sources.count >= 2 {
+                Button("Server 1") { model.choose(source: prompt.sources[0], for: prompt) }
+                Button("Server 2") { model.choose(source: prompt.sources[1], for: prompt) }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: { prompt in
+            Text(prompt.platform?.serverDescription ?? "")
+        }
+    }
+
     private var batchCount: Int { URLExtractor.urls(in: model.input).count }
 
-    private var clipboardBanner: some View {
-        HStack(spacing: 12) {
-            Image(systemName: "doc.on.clipboard")
-                .font(.title3)
-                .foregroundStyle(.tint)
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Link detected in clipboard").font(.subheadline.weight(.semibold))
-                Text("Tap Paste to analyze it").font(.caption).foregroundStyle(.secondary)
-            }
-            Spacer()
-            PasteButton(payloadType: String.self) { strings in
-                guard let text = strings.first else { return }
-                Task { @MainActor in
-                    clipboardHasURL = false
-                    model.input = text
-                    model.analyze()
-                }
-            }
-            .labelStyle(.iconOnly)
-            .buttonBorderShape(.capsule)
-        }
-        .padding(12)
-        .background(.tint.opacity(0.1), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .transition(.move(edge: .top).combined(with: .opacity))
+    private var clipboardHint: Bool { clipboardHasURL && model.input.isEmpty }
+
+    private var hintText: String {
+        if batchCount > 1 { return String(localized: "\(batchCount) links — they will be analyzed in batch") }
+        if clipboardHint { return String(localized: "Link detected in clipboard — tap Paste") }
+        return String(localized: "One link per line. Several links are analyzed in batch.")
+    }
+
+    /// Pasting never starts analysis, so several links can be collected first (one per line).
+    private func append(_ text: String) {
+        let incoming = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !incoming.isEmpty else { return }
+        let current = model.input.trimmingCharacters(in: .whitespacesAndNewlines)
+        model.input = current.isEmpty ? incoming : current + "\n" + incoming
+        clipboardHasURL = false
+        Haptics.tap()
     }
 
     @ViewBuilder
@@ -217,32 +235,38 @@ struct HomeView: View {
     }
 }
 
-private struct PlatformGrid: View {
+private struct WidthKey: PreferenceKey {
+    static var defaultValue: CGFloat? = nil
+    static func reduce(value: inout CGFloat?, nextValue: () -> CGFloat?) { value = nextValue() ?? value }
+}
+
+/// Display-only list of supported platforms (no button-like chrome).
+private struct PlatformList: View {
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 12) {
             Text("Supported platforms")
                 .font(.footnote.weight(.semibold))
                 .foregroundStyle(.secondary)
-                .textCase(.uppercase)
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: 104), spacing: 8)], spacing: 8) {
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 4), count: 4), spacing: 16) {
                 ForEach(Platform.allCases) { p in
-                    HStack(spacing: 6) {
+                    VStack(spacing: 6) {
                         Image(systemName: p.systemImage)
-                            .font(.caption.weight(.bold))
+                            .font(.system(size: 17, weight: .medium))
                             .foregroundStyle(p.tint)
-                            .frame(width: 18)
-                        Text(p.displayName)
-                            .font(.caption.weight(.medium))
+                            .frame(height: 22)
+                        Text(p.shortName)
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
                             .lineLimit(1)
-                            .minimumScaleFactor(0.8)
-                        Spacer(minLength: 0)
+                            .minimumScaleFactor(0.75)
                     }
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 8)
-                    .background(.thinMaterial, in: Capsule())
+                    .frame(maxWidth: .infinity)
                 }
             }
         }
+        .padding(.horizontal, 4)
+        .accessibilityElement(children: .combine)
+        .allowsHitTesting(false)
     }
 }
 

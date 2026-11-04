@@ -28,6 +28,9 @@ enum Platform: String, CaseIterable, Identifiable, Codable {
         }
     }
 
+    /// Compact name for dense layouts.
+    var shortName: String { self == .twitter ? "X" : displayName }
+
     var systemImage: String {
         switch self {
         case .tiktok, .douyin: return "music.note.tv"

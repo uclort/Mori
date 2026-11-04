@@ -23,7 +23,10 @@ struct GalleryView: View {
     @State private var selection = Set<URL>()
     @State private var preview: URL?
     @State private var shareItems: [URL]?
-    @State private var confirmDelete: [LibraryFile]?
+    /// Single file whose delete confirmation is showing (anchored to its cell).
+    @State private var deleteTarget: URL?
+    /// Delete confirmation for the current selection (anchored to the floating menu).
+    @State private var confirmDeleteSelection = false
     @State private var toast: String?
 
     private var visible: [LibraryFile] {
@@ -66,11 +69,20 @@ struct GalleryView: View {
                             GalleryCell(file: file, selecting: selecting, selected: selection.contains(file.url))
                                 .onTapGesture { tap(file) }
                                 .contextMenu { contextMenu(for: file) }
+                                .confirmationDialog("Delete files?",
+                                                    isPresented: Binding(get: { deleteTarget == file.url },
+                                                                         set: { if !$0 { deleteTarget = nil } }),
+                                                    titleVisibility: .visible) {
+                                    Button("Delete", role: .destructive) { delete([file]) }
+                                    Button("Cancel", role: .cancel) {}
+                                } message: {
+                                    Text("This permanently removes the files from your device.")
+                                }
                         }
                     }
                 }
                 .padding(.horizontal, 12)
-                .padding(.bottom, 12)
+                .padding(.bottom, selecting ? 80 : 12)
             }
             .refreshable { library.refresh() }
             .searchable(text: $search, prompt: "Search files")
@@ -78,7 +90,7 @@ struct GalleryView: View {
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
                     Button(selecting ? "Done" : "Select") {
-                        selecting.toggle()
+                        withAnimation { selecting.toggle() }
                         selection.removeAll()
                     }
                     .disabled(visible.isEmpty && !selecting)
@@ -91,24 +103,13 @@ struct GalleryView: View {
                     }
                 }
             }
-            .safeAreaInset(edge: .bottom) {
-                if selecting { selectionBar }
-            }
-            .quickLookPreview($preview, in: visible.map(\.url))
-            .sheet(item: Binding(get: { shareItems.map(ShareItems.init) }, set: { shareItems = $0?.urls })) {
-                ShareSheet(items: $0.urls)
-            }
-            .confirmationDialog("Delete files?", isPresented: Binding(get: { confirmDelete != nil },
-                                                                     set: { if !$0 { confirmDelete = nil } }),
-                                titleVisibility: .visible) {
-                Button("Delete \(confirmDelete?.count ?? 0) files", role: .destructive) {
-                    if let targets = confirmDelete {
-                        library.delete(targets)
-                        selection.subtract(targets.map(\.url))
-                    }
+            .overlay(alignment: .bottomTrailing) {
+                if selecting {
+                    selectionMenu
+                        .padding(.trailing, 20)
+                        .padding(.bottom, 16)
+                        .transition(.scale.combined(with: .opacity))
                 }
-            } message: {
-                Text("This permanently removes the files from your device.")
             }
             .overlay(alignment: .bottom) {
                 if let toast {
@@ -116,59 +117,110 @@ struct GalleryView: View {
                         .font(.subheadline.weight(.medium))
                         .padding(.horizontal, 16).padding(.vertical, 10)
                         .background(.regularMaterial, in: Capsule())
-                        .padding(.bottom, selecting ? 80 : 20)
+                        .padding(.bottom, selecting ? 84 : 20)
                         .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
+            }
+            .quickLookPreview($preview, in: visible.filter { $0.kind == .audio || $0.kind == .pdf || $0.kind == .other }.map(\.url))
+            .sheet(item: Binding(get: { shareItems.map(ShareItems.init) }, set: { shareItems = $0?.urls })) {
+                ShareSheet(items: $0.urls)
             }
         }
     }
 
     private var selectedFiles: [LibraryFile] { visible.filter { selection.contains($0.url) } }
 
-    private var selectionBar: some View {
-        HStack {
-            Button { saveToPhotos(selectedFiles) } label: {
-                Label("Save to Photos", systemImage: "photo.badge.plus")
+    /// Floating "…" button; actions open from it and the delete confirmation anchors to it.
+    private var selectionMenu: some View {
+        Menu {
+            Section(selection.isEmpty ? String(localized: "No files selected")
+                    : String(localized: "\(selection.count) selected")) {
+                Button { saveToPhotos(selectedFiles) } label: {
+                    Label("Save to Photos", systemImage: "photo.badge.plus")
+                }
+                .disabled(!selectedFiles.contains { PhotoSaver.canSave($0.url) })
+                Button { shareItems = selectedFiles.map(\.url) } label: {
+                    Label("Share", systemImage: "square.and.arrow.up")
+                }
+                .disabled(selection.isEmpty)
+                Button(role: .destructive) { confirmDeleteSelection = true } label: {
+                    Label("Delete", systemImage: "trash")
+                }
+                .disabled(selection.isEmpty)
             }
-            .disabled(!selectedFiles.contains { PhotoSaver.canSave($0.url) })
-            Spacer()
-            Button { shareItems = selectedFiles.map(\.url) } label: {
-                Label("Share", systemImage: "square.and.arrow.up")
-            }
-            .disabled(selection.isEmpty)
-            Spacer()
-            Button(role: .destructive) { confirmDelete = selectedFiles } label: {
-                Label("Delete", systemImage: "trash")
-            }
-            .disabled(selection.isEmpty)
+        } label: {
+            Image(systemName: "ellipsis")
+                .font(.system(size: 20, weight: .semibold))
+                .foregroundStyle(.white)
+                .frame(width: 54, height: 54)
+                .background(Color.accentColor, in: Circle())
+                .shadow(color: .black.opacity(0.2), radius: 8, y: 3)
+                .overlay(alignment: .topTrailing) {
+                    if !selection.isEmpty {
+                        Text("\(selection.count)")
+                            .font(.caption2.weight(.bold).monospacedDigit())
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 6).padding(.vertical, 2)
+                            .background(.red, in: Capsule())
+                            .offset(x: 4, y: -4)
+                    }
+                }
         }
-        .labelStyle(.iconOnly)
-        .font(.title3)
-        .padding(.horizontal, 40)
-        .padding(.vertical, 12)
-        .background(.bar)
+        .menuOrder(.fixed)
+        .accessibilityLabel("Actions")
+        .accessibilityIdentifier("gallery-actions")
+        .confirmationDialog("Delete files?", isPresented: $confirmDeleteSelection, titleVisibility: .visible) {
+            Button("Delete \(selection.count) files", role: .destructive) { delete(selectedFiles) }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This permanently removes the files from your device.")
+        }
     }
 
     @ViewBuilder
     private func contextMenu(for file: LibraryFile) -> some View {
-        Button { preview = file.url } label: { Label("Open", systemImage: "eye") }
+        Button { open(file) } label: { Label("Open", systemImage: "eye") }
         ShareLink(item: file.url) { Label("Share", systemImage: "square.and.arrow.up") }
         if PhotoSaver.canSave(file.url) {
             Button { saveToPhotos([file]) } label: { Label("Save to Photos", systemImage: "photo.badge.plus") }
         }
         Button {
-            selecting = true
+            withAnimation { selecting = true }
             selection = [file.url]
         } label: { Label("Select", systemImage: "checkmark.circle") }
-        Button(role: .destructive) { confirmDelete = [file] } label: { Label("Delete", systemImage: "trash") }
+        Button(role: .destructive) {
+            // Let the context menu finish dismissing before anchoring the confirmation to the cell
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { deleteTarget = file.url }
+        } label: { Label("Delete", systemImage: "trash") }
     }
 
     private func tap(_ file: LibraryFile) {
         if selecting {
             if selection.contains(file.url) { selection.remove(file.url) } else { selection.insert(file.url) }
         } else {
+            open(file)
+        }
+    }
+
+    private func open(_ file: LibraryFile) {
+        switch file.kind {
+        case .photo:
+            let photos = visible.filter { $0.kind == .photo }
+            let index = photos.firstIndex(of: file) ?? 0
+            PhotoBrowserPresenter.present(photos.map { .local($0.url) }, startAt: index)
+        case .video:
+            SystemVideoPlayer.play(file.url)
+        default:
             preview = file.url
         }
+    }
+
+    private func delete(_ targets: [LibraryFile]) {
+        library.delete(targets)
+        selection.subtract(targets.map(\.url))
+        deleteTarget = nil
+        if selecting && library.files.isEmpty { selecting = false }
+        Haptics.success()
     }
 
     private func saveToPhotos(_ files: [LibraryFile]) {
@@ -238,7 +290,11 @@ private struct GalleryCell: View {
                     RoundedRectangle(cornerRadius: 6, style: .continuous).strokeBorder(Color.accentColor, lineWidth: 3)
                 }
             }
+            .contentShape(.contextMenuPreview, RoundedRectangle(cornerRadius: 6, style: .continuous))
             .contentShape(Rectangle())
+            .accessibilityElement()
             .accessibilityLabel(file.name)
+            .accessibilityAddTraits(selected ? [.isButton, .isSelected] : .isButton)
+            .accessibilityIdentifier("gallery-cell")
     }
 }

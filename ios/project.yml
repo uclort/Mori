@@ -6,10 +6,17 @@ options:
     iOS: "16.0"
   createIntermediateGroups: true
   developmentLanguage: en
+packages:
+  Kingfisher:
+    url: https://github.com/onevcat/Kingfisher
+    from: "8.0.0"
+  JXPhotoBrowser:
+    url: https://github.com/JiongXing/PhotoBrowser
+    from: "4.2.0"
 settings:
   base:
-    MARKETING_VERSION: "5.0.0"
-    CURRENT_PROJECT_VERSION: "50000"
+    MARKETING_VERSION: "5.1.0"
+    CURRENT_PROJECT_VERSION: "51000"
     SWIFT_VERSION: "5.0"
     SWIFT_STRICT_CONCURRENCY: minimal
     ENABLE_USER_SCRIPT_SANDBOXING: NO
@@ -28,6 +35,9 @@ targets:
       - path: ../public/scrapers-version.json
         buildPhase: resources
         group: Mori/Engine/Shared
+    dependencies:
+      - package: Kingfisher
+      - package: JXPhotoBrowser
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.mori.downloader
@@ -41,6 +51,18 @@ targets:
         LOCALIZATION_PREFERS_STRING_CATALOGS: NO
         SWIFT_EMIT_LOC_STRINGS: YES
         CODE_SIGN_STYLE: Automatic
+  # Screenshot-driven UI walkthrough (DEBUG only, not shipped)
+  MoriUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources: [MoriUITests]
+    dependencies:
+      - target: Mori
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.mori.downloader.uitests
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_TARGET_NAME: Mori
 schemes:
   Mori:
     build:
@@ -48,5 +70,8 @@ schemes:
         Mori: all
     run:
       config: Debug
+    test:
+      config: Debug
+      targets: [MoriUITests]
     archive:
       config: Release

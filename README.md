@@ -6,7 +6,7 @@
 <p align="center"><em><strong>Save anything, From anywhere.</strong></em></p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Version-v5.0.0-brown?style=flat-square" alt="Version">
+  <img src="https://img.shields.io/badge/Version-v5.1.0-brown?style=flat-square" alt="Version">
   <img src="https://img.shields.io/badge/iOS-Native%20SwiftUI-0A84FF?style=flat-square&logo=swift&logoColor=white" alt="iOS Native SwiftUI">
   <a href="https://www.npmjs.com/package/@coflyn/mori"><img src="https://img.shields.io/npm/v/@coflyn/mori?style=flat-square&color=CB3837&logo=npm&logoColor=white" alt="NPM Version"></a>
   <img src="https://img.shields.io/github/downloads/coflyn/Mori/total?style=flat-square&color=blue" alt="Downloads">
@@ -59,11 +59,14 @@ Save and download videos, photos, and music from 16 platforms. No watermarks. No
 | 网络请求 | URLSession（Cookie 共享、可选跳过 SSL 校验、可配置超时与 User-Agent） |
 | 下载管理 | URLSession 下载任务：实时进度与速度、取消/重试、可配置并发数（1–5）、切到后台后短时继续 |
 | 保存位置 | 「文件」App（`我的 iPhone › Mori`）/ 相册（PhotoKit）/ 两者；WebP 自动转 JPEG 入相册 |
-| 预览 | 图集轮播 + 双指缩放、AVPlayer 在线预览视频（自动带 Referer 等请求头） |
-| 图库 | QuickLook 预览视频/图片/音频/PDF，筛选、搜索、多选批量保存到相册/分享/删除 |
+| 解析结果 | 图集以宫格展示，点图预览、点右上角按钮下载；视频/音频仅点下载按钮才开始下载 |
+| 图片加载 | [Kingfisher](https://github.com/onevcat/Kingfisher)（自动带 Referer 等请求头、降采样、内存+磁盘缓存，设置中可一键清理） |
+| 图片预览 | [JXPhotoBrowser](https://github.com/JiongXing/PhotoBrowser)（缩放、左右滑动、下拉关闭，预览中可直接下载当前图） |
+| 视频播放 | 系统播放器 AVPlayerViewController（在线预览自动带请求头） |
+| 图库 | 图片用 JXPhotoBrowser、视频用系统播放器、音频/PDF 用 QuickLook；筛选、搜索、多选后右下角悬浮菜单批量保存到相册/分享/删除 |
 | 图集导出 PDF | UIGraphicsPDFRenderer（替代 pdf-lib） |
-| 批量模式 | 输入框粘贴多个链接自动进入批量解析，失败时自动切换服务器 2 |
-| 剪贴板 | 系统 `PasteButton` + 链接模式检测，不再弹出粘贴权限提示 |
+| 批量模式 | 输入框每行一个链接，多个链接自动批量解析，失败时自动切换服务器 2 |
+| 剪贴板 | 系统 `PasteButton`（不弹粘贴权限提示），粘贴只追加到输入框、不自动解析，可连续粘贴多个链接 |
 | 隐私 | 无痕模式、面容 ID / 设备密码锁（LocalAuthentication） |
 | 解析引擎 | 设置中查看引擎版本、在线检查更新（OTA）、恢复内置引擎 |
 | 其他 | `mori://analyze?url=<链接>` URL Scheme、触感反馈、中英文本地化 |
@@ -259,7 +262,8 @@ Mori/
 │       ├── Download/           # Download queue, CDN headers, file naming, Photos saver, PDF exporter
 │       ├── Models/             # Media result, platforms, settings, history & library stores
 │       ├── Views/              # SwiftUI screens: Home, Result, Downloads, Gallery, History, Settings
-│       ├── Utilities/          # Remote image loader (Referer-aware, cached)
+│       ├── Utilities/          # Kingfisher image loading, JXPhotoBrowser presenter, system video player
+│   └── MoriUITests/            # Screenshot UI walkthrough (XCUITest)
 │       └── Resources/          # Info.plist, assets, en / zh-Hans localizations
 ├── cli/                        # Standalone Universal Media Downloader CLI (Node.js)
 ├── src-scrapers/               # Modular ES scraper engine source files (16 platforms)

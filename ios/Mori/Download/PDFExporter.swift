@@ -7,7 +7,7 @@ enum PDFExporter {
         var loaded: [UIImage] = []
         for (i, item) in images.enumerated() {
             try Task.checkCancellation()
-            if let img = try? await ImageLoader.shared.image(for: item.url, sourceURL: sourceURL, maxPixel: nil) {
+            if let img = try? await ImageLoader.image(for: item.url, sourceURL: sourceURL, headers: item.headers) {
                 loaded.append(img)
             }
             await MainActor.run { progress(Double(i + 1) / Double(images.count) * 0.9) }

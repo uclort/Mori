@@ -174,3 +174,15 @@
 "Videos, photos and music from 16 platforms. No watermarks, no accounts." = "支持 16 个平台的视频、图片和音乐，无水印、免登录。";
 "iPhone Safari" = "iPhone Safari";
 "v%lld · %@" = "v%1$lld · %2$@";
+
+/* v5.1 */
+"Paste or type a link" = "粘贴或输入链接";
+"%lld links — they will be analyzed in batch" = "已识别 %lld 个链接，将批量解析";
+"Link detected in clipboard — tap Paste" = "剪贴板中有链接，点「粘贴」添加";
+"One link per line. Several links are analyzed in batch." = "每行一个链接，多个链接会批量解析";
+"Added to downloads" = "已加入下载";
+"Other formats" = "其他格式";
+"Photo %lld" = "第 %lld 张图片";
+"No files selected" = "未选择文件";
+"%lld selected" = "已选择 %lld 项";
+"Actions" = "操作";

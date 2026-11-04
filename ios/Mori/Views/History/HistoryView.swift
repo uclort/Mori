@@ -58,11 +58,12 @@ struct HistoryView: View {
                 if !history.entries.isEmpty {
                     ToolbarItem(placement: .primaryAction) {
                         Button("Clear", role: .destructive) { confirmClear = true }
+                            .confirmationDialog("Clear all history?", isPresented: $confirmClear, titleVisibility: .visible) {
+                                Button("Clear history", role: .destructive) { history.clear() }
+                                Button("Cancel", role: .cancel) {}
+                            }
                     }
                 }
-            }
-            .confirmationDialog("Clear all history?", isPresented: $confirmClear, titleVisibility: .visible) {
-                Button("Clear history", role: .destructive) { history.clear() }
             }
         }
     }

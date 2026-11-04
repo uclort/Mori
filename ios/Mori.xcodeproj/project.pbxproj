@@ -16,11 +16,14 @@
 		2FB16023CD443835A2E17406 /* HistoryStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = D9CAE60FC4F84BABC1EBD34F /* HistoryStore.swift */; };
 		32A2BC658FE122421D98A4E9 /* ScraperEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3E788B6133E53AF30EC4874E /* ScraperEngine.swift */; };
 		33D62E204C722E165BA2E3F5 /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 97B9BD3F1CB51D0E63468BF3 /* HomeView.swift */; };
+		3590B30654DDB41DF713392F /* MediaViewers.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7425779F1652F2AA2E82BFE4 /* MediaViewers.swift */; };
 		359A8903E0232BB025E2BFC6 /* FileNaming.swift in Sources */ = {isa = PBXBuildFile; fileRef = 594CC34F8C921A08C14A1459 /* FileNaming.swift */; };
 		362EA2712BA4D503DF6E57AC /* bundle.js in Resources */ = {isa = PBXBuildFile; fileRef = 49AF62597D388C40DABAD434 /* bundle.js */; };
 		369B89F8FCE8034DB3666045 /* LibraryStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4CAEF5E52B28BE76CC64C4BA /* LibraryStore.swift */; };
 		3A932E7FE435738BDFCE8655 /* MediaResult.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31A53C4828251DE84A107EC7 /* MediaResult.swift */; };
 		3F95552E5E37096BA7BDEC30 /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = 5FEA0C25D7CAD1FAEAA11A3E /* InfoPlist.strings */; };
+		617097EAB12CF03B0F41413E /* JXPhotoBrowser in Frameworks */ = {isa = PBXBuildFile; productRef = BA187A30AE6A5B5548667FE5 /* JXPhotoBrowser */; };
+		7F56FAF608E61144C603375D /* MoriUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 812AB5EB6BC149A4C648E311 /* MoriUITests.swift */; };
 		81B4F81027CBEB9C6D6FDA41 /* EngineHTTP.swift in Sources */ = {isa = PBXBuildFile; fileRef = F667C142F6E4A5621178AEE9 /* EngineHTTP.swift */; };
 		81CCC55702F05BEABCCC860E /* DownloadHeaders.swift in Sources */ = {isa = PBXBuildFile; fileRef = C48FC88648BFD6F29CDD84D0 /* DownloadHeaders.swift */; };
 		86256B57E9B38B628F63F40B /* EngineHost.js in Resources */ = {isa = PBXBuildFile; fileRef = FB1AC1763DF97CB66E8C247F /* EngineHost.js */; };
@@ -31,6 +34,7 @@
 		A281BEA7DFAC248F20A3F1EC /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = F2E4AFEFE87AECBB391EDBEE /* Localizable.strings */; };
 		B867AA70AB10CCA8F2020D90 /* PhotoSaver.swift in Sources */ = {isa = PBXBuildFile; fileRef = C91D65773ED746655C4DEDD0 /* PhotoSaver.swift */; };
 		BA6D853507E199A5991A4335 /* DownloadManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6696756AF131CAF7EBC1CB07 /* DownloadManager.swift */; };
+		C0C48AACA8E6FF74635C3385 /* Kingfisher in Frameworks */ = {isa = PBXBuildFile; productRef = 4CA969C25635C014268B7658 /* Kingfisher */; };
 		CB95CAEE882FB77B62447257 /* DownloadsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 045469395FDE59A53DAFCFC6 /* DownloadsView.swift */; };
 		E30AAE7B51EB4CB9DDFD0E33 /* EngineStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB5B36E5776401D06BD66AF3 /* EngineStore.swift */; };
 		F0467D138F84330009448377 /* PDFExporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = F487CFE18474DA2124CD19A2 /* PDFExporter.swift */; };
@@ -38,6 +42,16 @@
 		F2EADB10AD37F7EE0F217C0D /* AnalyzeModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0D3B66D7EDE116486D96C8EA /* AnalyzeModel.swift */; };
 		F81C0F049C346767AA9222BB /* MoriApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3E98EA11FBB0015C73FE358A /* MoriApp.swift */; };
 /* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		517428416AE7A39AD1F37A14 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 6D1B5DB9018D9D4FB4962AFF /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 555F06634E0DCC958AE3C40D;
+			remoteInfo = Mori;
+		};
+/* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
 		01567FED82DA6CD8E1BCC8FB /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
@@ -55,10 +69,13 @@
 		49AF62597D388C40DABAD434 /* bundle.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = bundle.js; path = ../../../public/js/scrapers/bundle.js; sourceTree = "<group>"; };
 		4CAEF5E52B28BE76CC64C4BA /* LibraryStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryStore.swift; sourceTree = "<group>"; };
 		594CC34F8C921A08C14A1459 /* FileNaming.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileNaming.swift; sourceTree = "<group>"; };
+		5F7609581077EE0CBFF5E708 /* MoriUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = MoriUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		62F9120F39BD4552A01D2CFB /* Mori.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Mori.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		6696756AF131CAF7EBC1CB07 /* DownloadManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DownloadManager.swift; sourceTree = "<group>"; };
+		7425779F1652F2AA2E82BFE4 /* MediaViewers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaViewers.swift; sourceTree = "<group>"; };
 		7BEDBB66A0A30A68E42A84E3 /* ImageLoader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageLoader.swift; sourceTree = "<group>"; };
 		806F96260C3E64CBECE403EF /* scrapers-version.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; name = "scrapers-version.json"; path = "../../../public/scrapers-version.json"; sourceTree = "<group>"; };
+		812AB5EB6BC149A4C648E311 /* MoriUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MoriUITests.swift; sourceTree = "<group>"; };
 		97B9BD3F1CB51D0E63468BF3 /* HomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeView.swift; sourceTree = "<group>"; };
 		C48FC88648BFD6F29CDD84D0 /* DownloadHeaders.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DownloadHeaders.swift; sourceTree = "<group>"; };
 		C6E2180489E90B173AE290CC /* AppSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSettings.swift; sourceTree = "<group>"; };
@@ -74,6 +91,18 @@
 		FB5B36E5776401D06BD66AF3 /* EngineStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EngineStore.swift; sourceTree = "<group>"; };
 		FCF96A4C1C63F49E853333FC /* FileDownloader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileDownloader.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		CD1AE3121DEBE10F7FF4A0AA /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				C0C48AACA8E6FF74635C3385 /* Kingfisher in Frameworks */,
+				617097EAB12CF03B0F41413E /* JXPhotoBrowser in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
 		09E40D460A7DC1B03252E0A5 /* Downloads */ = {
@@ -174,6 +203,7 @@
 			isa = PBXGroup;
 			children = (
 				7BEDBB66A0A30A68E42A84E3 /* ImageLoader.swift */,
+				7425779F1652F2AA2E82BFE4 /* MediaViewers.swift */,
 			);
 			path = Utilities;
 			sourceTree = "<group>";
@@ -182,6 +212,7 @@
 			isa = PBXGroup;
 			children = (
 				62F9120F39BD4552A01D2CFB /* Mori.app */,
+				5F7609581077EE0CBFF5E708 /* MoriUITests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -190,8 +221,17 @@
 			isa = PBXGroup;
 			children = (
 				C5A97D031E1F01B8AF32E037 /* Mori */,
+				A7A07F8541E62281BD4B794D /* MoriUITests */,
 				A6E4849ADFD1B41BA2C9A6CB /* Products */,
 			);
+			sourceTree = "<group>";
+		};
+		A7A07F8541E62281BD4B794D /* MoriUITests */ = {
+			isa = PBXGroup;
+			children = (
+				812AB5EB6BC149A4C648E311 /* MoriUITests.swift */,
+			);
+			path = MoriUITests;
 			sourceTree = "<group>";
 		};
 		C5A97D031E1F01B8AF32E037 /* Mori */ = {
@@ -251,6 +291,7 @@
 			buildPhases = (
 				60BEF08E62A77FC8F707C97E /* Sources */,
 				CC03969528C9C2A917AFE40A /* Resources */,
+				CD1AE3121DEBE10F7FF4A0AA /* Frameworks */,
 			);
 			buildRules = (
 			);
@@ -258,10 +299,30 @@
 			);
 			name = Mori;
 			packageProductDependencies = (
+				4CA969C25635C014268B7658 /* Kingfisher */,
+				BA187A30AE6A5B5548667FE5 /* JXPhotoBrowser */,
 			);
 			productName = Mori;
 			productReference = 62F9120F39BD4552A01D2CFB /* Mori.app */;
 			productType = "com.apple.product-type.application";
+		};
+		D88E1E2941D644A4F4D14A44 /* MoriUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = DA74BFDA02D4713170EC629F /* Build configuration list for PBXNativeTarget "MoriUITests" */;
+			buildPhases = (
+				5357BF8C79A6CA21F72C5B79 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				CE6E88746E06F34EADD9B189 /* PBXTargetDependency */,
+			);
+			name = MoriUITests;
+			packageProductDependencies = (
+			);
+			productName = MoriUITests;
+			productReference = 5F7609581077EE0CBFF5E708 /* MoriUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
 		};
 /* End PBXNativeTarget section */
 
@@ -275,6 +336,9 @@
 					555F06634E0DCC958AE3C40D = {
 						ProvisioningStyle = Automatic;
 					};
+					D88E1E2941D644A4F4D14A44 = {
+						TestTargetID = 555F06634E0DCC958AE3C40D;
+					};
 				};
 			};
 			buildConfigurationList = 090C52AD62D8C8EBF3761C39 /* Build configuration list for PBXProject "Mori" */;
@@ -287,12 +351,17 @@
 			);
 			mainGroup = A717644E1D08484C44791969;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				6D36710E1625542557A4867C /* XCRemoteSwiftPackageReference "PhotoBrowser" */,
+				F657090B45CF427DE054133E /* XCRemoteSwiftPackageReference "Kingfisher" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = A6E4849ADFD1B41BA2C9A6CB /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
 				555F06634E0DCC958AE3C40D /* Mori */,
+				D88E1E2941D644A4F4D14A44 /* MoriUITests */,
 			);
 		};
 /* End PBXProject section */
@@ -314,6 +383,14 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		5357BF8C79A6CA21F72C5B79 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				7F56FAF608E61144C603375D /* MoriUITests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		60BEF08E62A77FC8F707C97E /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -335,6 +412,7 @@
 				369B89F8FCE8034DB3666045 /* LibraryStore.swift in Sources */,
 				86C7F3A78DFF6F5E6CF8852F /* MediaPreview.swift in Sources */,
 				3A932E7FE435738BDFCE8655 /* MediaResult.swift in Sources */,
+				3590B30654DDB41DF713392F /* MediaViewers.swift in Sources */,
 				F81C0F049C346767AA9222BB /* MoriApp.swift in Sources */,
 				F0467D138F84330009448377 /* PDFExporter.swift in Sources */,
 				B867AA70AB10CCA8F2020D90 /* PhotoSaver.swift in Sources */,
@@ -346,6 +424,14 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		CE6E88746E06F34EADD9B189 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 555F06634E0DCC958AE3C40D /* Mori */;
+			targetProxy = 517428416AE7A39AD1F37A14 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin PBXVariantGroup section */
 		5FEA0C25D7CAD1FAEAA11A3E /* InfoPlist.strings */ = {
@@ -382,6 +468,40 @@
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = Release;
+		};
+		444B8058F69134F3E7B91283 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.mori.downloader.uitests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = Mori;
+			};
+			name = Release;
+		};
+		93406D4CAE146D40F9878BC3 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.mori.downloader.uitests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = Mori;
+			};
+			name = Debug;
 		};
 		A8B0A5FC9530D0F8A2251C09 /* Debug */ = {
 			isa = XCBuildConfiguration;
@@ -440,7 +560,7 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 50000;
+				CURRENT_PROJECT_VERSION = 51000;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
@@ -454,7 +574,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
-				MARKETING_VERSION = 5.0.0;
+				MARKETING_VERSION = 5.1.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -500,7 +620,7 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 50000;
+				CURRENT_PROJECT_VERSION = 51000;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
@@ -520,7 +640,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
-				MARKETING_VERSION = 5.0.0;
+				MARKETING_VERSION = 5.1.0;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
@@ -554,7 +674,48 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;
 		};
+		DA74BFDA02D4713170EC629F /* Build configuration list for PBXNativeTarget "MoriUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				93406D4CAE146D40F9878BC3 /* Debug */,
+				444B8058F69134F3E7B91283 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		6D36710E1625542557A4867C /* XCRemoteSwiftPackageReference "PhotoBrowser" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/JiongXing/PhotoBrowser";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 4.2.0;
+			};
+		};
+		F657090B45CF427DE054133E /* XCRemoteSwiftPackageReference "Kingfisher" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/onevcat/Kingfisher";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 8.0.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		4CA969C25635C014268B7658 /* Kingfisher */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = F657090B45CF427DE054133E /* XCRemoteSwiftPackageReference "Kingfisher" */;
+			productName = Kingfisher;
+		};
+		BA187A30AE6A5B5548667FE5 /* JXPhotoBrowser */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 6D36710E1625542557A4867C /* XCRemoteSwiftPackageReference "PhotoBrowser" */;
+			productName = JXPhotoBrowser;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 6D1B5DB9018D9D4FB4962AFF /* Project object */;
 }

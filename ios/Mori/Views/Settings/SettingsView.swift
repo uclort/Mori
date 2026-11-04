@@ -12,6 +12,8 @@ struct SettingsView: View {
     @State private var confirmClearFiles = false
     @State private var confirmClearHistory = false
     @State private var lockError: String?
+    @State private var cacheSize: UInt?
+    @State private var clearingCache = false
 
     var body: some View {
         NavigationStack {
@@ -25,14 +27,7 @@ struct SettingsView: View {
                 aboutSection
             }
             .navigationTitle("Settings")
-            .confirmationDialog("Delete all downloaded files?", isPresented: $confirmClearFiles, titleVisibility: .visible) {
-                Button("Delete all files", role: .destructive) { library.deleteAll() }
-            } message: {
-                Text("Files saved to Photos are not affected.")
-            }
-            .confirmationDialog("Clear all history?", isPresented: $confirmClearHistory, titleVisibility: .visible) {
-                Button("Clear history", role: .destructive) { history.clear() }
-            }
+            .task { cacheSize = await ImageLoader.diskCacheSize() }
             .alert("Face ID", isPresented: Binding(get: { lockError != nil }, set: { if !$0 { lockError = nil } })) {
                 Button("OK", role: .cancel) {}
             } message: { Text(lockError ?? "") }
@@ -157,13 +152,39 @@ struct SettingsView: View {
             LabeledContent("Total", value: ByteCountFormatter.string(fromByteCount: library.totalSize, countStyle: .file))
             Button("Delete all downloaded files", role: .destructive) { confirmClearFiles = true }
                 .disabled(library.files.isEmpty)
+                .confirmationDialog("Delete all downloaded files?", isPresented: $confirmClearFiles, titleVisibility: .visible) {
+                    Button("Delete all files", role: .destructive) { library.deleteAll() }
+                    Button("Cancel", role: .cancel) {}
+                } message: {
+                    Text("Files saved to Photos are not affected.")
+                }
             Button("Clear history", role: .destructive) { confirmClearHistory = true }
                 .disabled(history.entries.isEmpty)
-            Button("Clear image cache") {
-                URLCache.shared.removeAllCachedResponses()
-                let dir = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0].appendingPathComponent("ImageCache")
-                try? FileManager.default.removeItem(at: dir)
+                .confirmationDialog("Clear all history?", isPresented: $confirmClearHistory, titleVisibility: .visible) {
+                    Button("Clear history", role: .destructive) { history.clear() }
+                    Button("Cancel", role: .cancel) {}
+                }
+            Button {
+                clearingCache = true
+                Task {
+                    await ImageLoader.clearAllCaches()
+                    cacheSize = await ImageLoader.diskCacheSize()
+                    clearingCache = false
+                    Haptics.success()
+                }
+            } label: {
+                HStack {
+                    Text("Clear image cache")
+                    Spacer()
+                    if clearingCache {
+                        ProgressView()
+                    } else if let cacheSize {
+                        Text(ByteCountFormatter.string(fromByteCount: Int64(cacheSize), countStyle: .file))
+                            .foregroundStyle(.secondary)
+                    }
+                }
             }
+            .disabled(clearingCache)
         }
     }
 

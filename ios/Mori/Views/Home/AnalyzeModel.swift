@@ -54,6 +54,16 @@ final class AnalyzeModel: ObservableObject {
         run(url: prompt.url, source: source)
     }
 
+    #if DEBUG
+    /// UI-test fixture: a 7-photo post with public sample images.
+    func showDemoPhotos() {
+        let photos = (1...7).map { MediaDownload(type: "PHOTO", url: "https://picsum.photos/seed/mori\($0)/900/1200.jpg") }
+        let result = MediaResult(title: "Demo photo post", author: "Mori", thumbnail: photos[0].url,
+                                 downloads: photos, sourceUrl: "https://www.douyin.com/note/0")
+        path.append(ResultRoute(url: result.sourceUrl, platform: .douyin, result: result))
+    }
+    #endif
+
     func cancel() {
         task?.cancel()
         task = nil

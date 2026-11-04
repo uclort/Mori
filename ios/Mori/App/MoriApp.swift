@@ -25,7 +25,7 @@ struct MoriApp: App {
                     #if DEBUG
                     // xcrun simctl launch <udid> com.mori.downloader -moriTestURL <link>
                     if let link = UserDefaults.standard.string(forKey: "moriTestURL") {
-                        model.analyze(url: link)
+                        if link == "demo:photos" { model.showDemoPhotos() } else { model.analyze(url: link) }
                     }
                     #endif
                 }

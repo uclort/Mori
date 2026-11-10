@@ -50,6 +50,9 @@ struct SettingsView: View {
             Stepper(value: $settings.concurrentDownloads, in: 1...5) {
                 LabeledContent("Simultaneous downloads", value: "\(settings.concurrentDownloads)")
             }
+            Picker("Batch media format", selection: $settings.batchFormat) {
+                ForEach(BatchFormat.allCases) { Text($0.label).tag($0) }
+            }
             Toggle("Auto-download first option", isOn: $settings.autoDownload)
             Button(action: openDownloadFolder) {
                 Label("Open in Files", systemImage: "folder")

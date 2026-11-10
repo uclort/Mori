@@ -26,6 +26,12 @@ enum SaveTarget: String, CaseIterable, Identifiable {
 
 enum FilenameTemplate: String, CaseIterable, Identifiable {
     case title, titlePlatform = "title-platform", titleDate = "title-date", titleTimestamp = "title-timestamp"
+    // Short formats with a per-platform running number (upstream #21)
+    case platformDateNumber = "platform_date_number"
+    case platformTimeNumber = "platform_time_number"
+    case platformQualityNumber = "platform_quality_number"
+    case platformDateTimeQualityNumber = "platform_date_time_quality_number"
+
     var id: String { rawValue }
     var label: LocalizedStringKey {
         switch self {
@@ -33,6 +39,35 @@ enum FilenameTemplate: String, CaseIterable, Identifiable {
         case .titlePlatform: return "Title_Platform"
         case .titleDate: return "Title_Date"
         case .titleTimestamp: return "Title_Timestamp"
+        case .platformDateNumber: return "Platform_Date_No."
+        case .platformTimeNumber: return "Platform_Time_No."
+        case .platformQualityNumber: return "Platform_Quality_No."
+        case .platformDateTimeQualityNumber: return "Platform_Date_Time_Quality_No."
+        }
+    }
+
+    /// Placeholder pattern: {title} {platform} {date} {time} {quality} {num} {timestamp}
+    var pattern: String {
+        switch self {
+        case .title: return "{title}"
+        case .titlePlatform: return "{title}_{platform}"
+        case .titleDate: return "{title}_{date}"
+        case .titleTimestamp: return "{title}_{timestamp}"
+        case .platformDateNumber: return "{platform}_{date}_{num}"
+        case .platformTimeNumber: return "{platform}_{time}_{num}"
+        case .platformQualityNumber: return "{platform}_{quality}_{num}"
+        case .platformDateTimeQualityNumber: return "{platform}_{date}_{time}_{quality}_{num}"
+        }
+    }
+}
+
+enum BatchFormat: String, CaseIterable, Identifiable {
+    case video, audio
+    var id: String { rawValue }
+    var label: LocalizedStringKey {
+        switch self {
+        case .video: return "Video (best available)"
+        case .audio: return "Audio only (MP3)"
         }
     }
 }
@@ -91,6 +126,7 @@ final class AppSettings: ObservableObject {
     @AppStorage("autoPlatformFolder") var autoPlatformFolder = true
     @AppStorage("concurrentDownloads") var concurrentDownloads = 2
     @AppStorage("autoDownload") var autoDownload = false
+    @AppStorage("batchFormat") var batchFormat: BatchFormat = .video
     @AppStorage("requestTimeout") var requestTimeout = 30
     @AppStorage("headerSpoofing") var headerSpoofing = true
     @AppStorage("bypassSSL") var bypassSSL = false

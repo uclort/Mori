@@ -176,7 +176,8 @@ final class DownloadManager: ObservableObject {
             var ext = FileNaming.resolveExtension(type: req.type, url: mediaURL)
             let title = FileNaming.sanitizeTitle(req.title, type: req.type)
             let folder = StorageLocations.folder(isAudio: isAudio, platform: req.platform)
-            if case .skip(let existing) = StorageLocations.destination(in: folder, fileName: FileNaming.fileName(title: title, ext: ext, platform: req.platform)) {
+            let plannedName = FileNaming.fileName(title: title, ext: ext, platform: req.platform, type: req.type, url: req.url)
+            if case .skip(let existing) = StorageLocations.destination(in: folder, fileName: plannedName) {
                 item.fileURL = existing
                 item.progress = 1
                 item.status = .skipped
@@ -208,7 +209,8 @@ final class DownloadManager: ObservableObject {
             // 4. Move into place
             item.status = .saving
             ext = FileNaming.correctedExtension(ext, mimeType: response.mimeType)
-            let finalName = FileNaming.fileName(title: title, ext: ext, platform: req.platform)
+            let finalName = FileNaming.fileName(title: title, ext: ext, platform: req.platform, type: req.type,
+                                                url: req.url, consumeCounter: true)
             let dest: URL
             switch StorageLocations.destination(in: folder, fileName: finalName) {
             case .use(let u): dest = u

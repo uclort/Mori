@@ -164,15 +164,23 @@ final class BatchSession: ObservableObject, Identifiable {
         isAnalyzing = false
     }
 
-    /// Downloads the primary video of each post, or every photo for photo posts.
+    /// Downloads the primary video of each post (or its audio when "Batch media format" is
+    /// set to audio only), every track/photo for albums and photo posts.
     func downloadAll() {
         isDownloading = true
+        let preferAudio = AppSettings.shared.batchFormat == .audio
         var requests: [DownloadRequest] = []
         for item in items {
             guard let result = item.result else { continue }
             let list = result.downloads.filter { !$0.isMirror }
             let isVideoPost = list.contains { $0.isVideo }
-            let picks = isVideoPost ? Array(list.prefix(1)) : (result.isMultiItem ? list : Array(list.prefix(1)))
+            let picks: [MediaDownload]
+            if isVideoPost {
+                let audio = preferAudio ? list.first(where: { $0.isAudio && !$0.isVideo }) : nil
+                picks = [audio ?? list[0]]
+            } else {
+                picks = result.isMultiItem ? list : Array(list.prefix(1))
+            }
             requests += picks.map {
                 DownloadRequest(item: $0, title: result.itemTitle(for: $0),
                                 sourceURL: result.sourceUrl, platform: item.platform)

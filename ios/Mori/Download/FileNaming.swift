@@ -78,23 +78,63 @@ enum FileNaming {
         return s.isEmpty ? "Mori_Media" : s
     }
 
-    static func fileName(title: String, ext: String, platform: Platform?) -> String {
+    /// Builds the file name from the selected template.
+    /// - Parameter consumeCounter: `false` only peeks the next `{num}` (used for the pre-download
+    ///   "already exists" check); the final name passes `true` to advance the per-platform counter.
+    static func fileName(title: String, ext: String, platform: Platform?, type: String = "", url: String = "",
+                         consumeCounter: Bool = false) -> String {
+        let cleanExt = ext.lowercased()
         var clean = title
-        if clean.lowercased().hasSuffix("." + ext) { clean = String(clean.dropLast(ext.count + 1)) }
-        let name: String
-        switch AppSettings.shared.filenameTemplate {
-        case .title:
-            name = clean
-        case .titlePlatform:
-            name = "\(clean)_\(platformFolder(platform).replacingOccurrences(of: " ", with: ""))"
-        case .titleDate:
-            let f = DateFormatter()
-            f.dateFormat = "yyyy-MM-dd"
-            name = "\(clean)_\(f.string(from: Date()))"
-        case .titleTimestamp:
-            name = "\(clean)_\(Int(Date().timeIntervalSince1970 * 1000))"
+        if clean.lowercased().hasSuffix("." + cleanExt) { clean = String(clean.dropLast(cleanExt.count + 1)) }
+        let pattern = AppSettings.shared.filenameTemplate.pattern
+        let platformName = platform == nil ? "Media" : platformFolder(platform)
+        let now = Date()
+        func fmt(_ f: String) -> String {
+            let df = DateFormatter()
+            df.locale = Locale(identifier: "en_US_POSIX")
+            df.dateFormat = f
+            return df.string(from: now)
         }
-        return "\(name).\(ext.lowercased())"
+        var name = pattern
+            .replacingOccurrences(of: "{title}", with: clean)
+            .replacingOccurrences(of: "{platform}", with: platformName)
+            .replacingOccurrences(of: "{date}", with: fmt("yyyy-MM-dd"))
+            .replacingOccurrences(of: "{time}", with: fmt("HH-mm-ss"))
+            .replacingOccurrences(of: "{quality}", with: quality(type: type, url: url))
+            .replacingOccurrences(of: "{timestamp}", with: String(Int(now.timeIntervalSince1970 * 1000)))
+        if name.contains("{num}") {
+            name = name.replacingOccurrences(of: "{num}", with: counter(for: platformName, consume: consumeCounter))
+        }
+        name = name.replacingOccurrences(of: #"[\\/:*?"<>|]"#, with: "", options: .regularExpression)
+            .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespaces)
+        if name.isEmpty { name = clean.isEmpty ? "Mori_Media" : clean }
+        return "\(name).\(cleanExt)"
+    }
+
+    /// "1080p", "720p", "4k", "320kbps"… from the media label / URL, or "na".
+    static func quality(type: String, url: String) -> String {
+        let raw = "\(type) \(url)"
+        let patterns = [
+            #"(?:^|[^a-z0-9])(2160p|1440p|1080p|720p|480p|360p|240p|144p|8k|4k|2k|hd|sd)(?:[^a-z0-9]|$)"#,
+            #"(?:^|[^a-z0-9])(\d{2,3}k(?:bps)?)(?:[^a-z0-9]|$)"#,
+        ]
+        for p in patterns {
+            if let re = try? NSRegularExpression(pattern: p, options: .caseInsensitive),
+               let m = re.firstMatch(in: raw, range: NSRange(raw.startIndex..., in: raw)),
+               let r = Range(m.range(at: 1), in: raw) {
+                return raw[r].lowercased()
+            }
+        }
+        return "na"
+    }
+
+    /// Persistent running number per platform, zero-padded to 3 digits ("001").
+    static func counter(for platformName: String, consume: Bool) -> String {
+        let key = "counter_\(platformName.lowercased())"
+        let next = max(0, UserDefaults.standard.integer(forKey: key)) + 1
+        if consume { UserDefaults.standard.set(next, forKey: key) }
+        return String(format: "%03d", next)
     }
 
     /// Sub-folder per platform (same names the Capacitor build used, so old files stay grouped).

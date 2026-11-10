@@ -26,7 +26,8 @@ enum DownloadHeaders {
         let src = sourceURL ?? ""
         let isX = src.range(of: #"(?:^|[/.])x\.com(?:[/?#:]|$)"#, options: [.regularExpression, .caseInsensitive]) != nil
 
-        let isYtmp3GG = d.contains("ytmp3.gg") || d.contains("convert1s.com") || d.contains("lilillliiillliillii.shop")
+        // convert1s/ytmp3.gg rotate through throwaway *.shop CDN domains
+        let isYtmp3GG = d.contains("ytmp3.gg") || d.contains("convert1s.com") || d.contains(".shop/")
         let isYoutube = isYtmp3GG || d.contains("ytmp3.mobi") || d.contains("ytdown") || d.contains("ymcdn.org")
             || src.contains("youtube.com") || src.contains("youtu.be")
         let isTwitter = d.contains("tweeload") || d.contains("savetwt") || d.contains("twimg.com") || d.contains("acxcdn.com")

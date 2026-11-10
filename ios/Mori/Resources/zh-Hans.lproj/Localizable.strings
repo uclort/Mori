@@ -162,6 +162,13 @@
 "Title_Date" = "标题_日期";
 "Title_Platform" = "标题_平台";
 "Title_Timestamp" = "标题_时间戳";
+"Platform_Date_No." = "平台_日期_编号";
+"Platform_Time_No." = "平台_时间_编号";
+"Platform_Quality_No." = "平台_画质_编号";
+"Platform_Date_Time_Quality_No." = "平台_日期_时间_画质_编号";
+"Batch media format" = "批量媒体格式";
+"Video (best available)" = "视频（最佳可用）";
+"Audio only (MP3)" = "仅音频（MP3）";
 "Total" = "合计";
 "Tracks" = "曲目";
 "Unlock" = "解锁";

@@ -138,7 +138,7 @@
 "Server 1: SpotiDown (Playlist & Single Track)\nServer 2: SoundLoaders (Playlist & Single Track)" = "服务器 1：SpotiDown（播放列表与单曲）\n服务器 2：SoundLoaders（播放列表与单曲）";
 "Server 1: TVD (Full HD 1080p · 720p · Multi-Res)\nServer 2: SaveTWT (HD MP4 · Multi-Res)" = "服务器 1：TVD（全高清 1080p · 720p · 多分辨率）\n服务器 2：SaveTWT（高清 MP4 · 多分辨率）";
 "Server 1: TikTokIO (HD Video · MP3 · Photo Slideshow)\nServer 2: TikDownloader (Full HD 1080p · MP3 · Photo Slideshow)" = "服务器 1：TikTokIO（高清无水印 · MP3 · 图集）\n服务器 2：TikDownloader（1080p 超清 · MP3 · 图集）";
-"Server 1: YTMP3.gg (Multi Resolution 1080p - 360p + MP3)\nServer 2: YTMP3.mobi (Fast & Stable MP4 / MP3)" = "服务器 1：YTMP3.gg（多分辨率 1080p - 360p + MP3）\n服务器 2：YTMP3.mobi（快速稳定 MP4 / MP3）";
+"Server 1: YTMP3.gg (Multi Resolution 1080p - 360p + MP3)\nServer 2: YTMP3.gl (Fast & Stable MP4 / MP3)" = "服务器 1：YTMP3.gg（多分辨率 1080p - 360p + MP3）\n服务器 2：YTMP3.gl（快速稳定 MP4 / MP3）";
 "Server 2" = "服务器 2";
 "Server choice applies to TikTok, Instagram, YouTube, X and Spotify. Only bypass SSL validation on networks you trust." = "服务器选择适用于 TikTok、Instagram、YouTube、X 和 Spotify。仅在可信网络下跳过 SSL 校验。";
 "Server selection required" = "需要选择服务器";

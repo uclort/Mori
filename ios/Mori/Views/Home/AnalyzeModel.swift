@@ -165,7 +165,8 @@ final class BatchSession: ObservableObject, Identifiable {
     }
 
     /// Downloads the primary video of each post (or its audio when "Batch media format" is
-    /// set to audio only), every track/photo for albums and photo posts.
+    /// set to audio only), every track for albums/playlists, and every video + photo for
+    /// carousels and mixed posts (upstream f8eae0b).
     func downloadAll() {
         isDownloading = true
         let preferAudio = AppSettings.shared.batchFormat == .audio
@@ -173,17 +174,46 @@ final class BatchSession: ObservableObject, Identifiable {
         for item in items {
             guard let result = item.result else { continue }
             let list = result.downloads.filter { !$0.isMirror }
-            let isVideoPost = list.contains { $0.isVideo }
-            let picks: [MediaDownload]
-            if isVideoPost {
+            guard !list.isEmpty else { continue }
+
+            let photoItems = list.filter { $0.isPhoto && !$0.isVideo }
+            let isAudioPost = list.allSatisfy { $0.isAudio && !$0.isVideo }
+            let videoItems = list.filter { $0.isVideo && !photoItems.contains($0) }
+            let hasMirror = result.downloads.contains { $0.isMirror }
+            let isResolutionTiers = photoItems.isEmpty && list.count > 1 && (
+                hasMirror || list.contains {
+                    $0.type.range(of: #"\b\d{3,4}p\b|^(hd|sd)$"#, options: [.regularExpression, .caseInsensitive]) != nil
+                }
+            )
+
+            if isAudioPost {
+                requests += list.map {
+                    DownloadRequest(item: $0, title: result.itemTitle(for: $0),
+                                    sourceURL: result.sourceUrl, platform: item.platform)
+                }
+            } else if isResolutionTiers || (photoItems.isEmpty && videoItems.count == 1) {
                 let audio = preferAudio ? list.first(where: { $0.isAudio && !$0.isVideo }) : nil
-                picks = [audio ?? list[0]]
+                let pick = audio ?? videoItems.first ?? list[0]
+                requests.append(DownloadRequest(item: pick, title: result.itemTitle(for: pick),
+                                                sourceURL: result.sourceUrl, platform: item.platform))
+            } else if !videoItems.isEmpty || !photoItems.isEmpty {
+                for (vIdx, vObj) in videoItems.enumerated() {
+                    let vTitle = (videoItems.count > 1 || !photoItems.isEmpty)
+                        ? "\(result.title)_video_\(vIdx + 1)"
+                        : result.itemTitle(for: vObj)
+                    requests.append(DownloadRequest(item: vObj, title: vTitle,
+                                                    sourceURL: result.sourceUrl, platform: item.platform))
+                }
+                for pObj in photoItems {
+                    requests.append(DownloadRequest(item: pObj, title: result.itemTitle(for: pObj),
+                                                    sourceURL: result.sourceUrl, platform: item.platform))
+                }
             } else {
-                picks = result.isMultiItem ? list : Array(list.prefix(1))
-            }
-            requests += picks.map {
-                DownloadRequest(item: $0, title: result.itemTitle(for: $0),
-                                sourceURL: result.sourceUrl, platform: item.platform)
+                let picks = result.isMultiItem ? list : Array(list.prefix(1))
+                requests += picks.map {
+                    DownloadRequest(item: $0, title: result.itemTitle(for: $0),
+                                    sourceURL: result.sourceUrl, platform: item.platform)
+                }
             }
         }
         Task {

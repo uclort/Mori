@@ -28,7 +28,8 @@ enum DownloadHeaders {
 
         // convert1s/ytmp3.gg rotate through throwaway *.shop CDN domains
         let isYtmp3GG = d.contains("ytmp3.gg") || d.contains("convert1s.com") || d.contains(".shop/")
-        let isYoutube = isYtmp3GG || d.contains("ytmp3.mobi") || d.contains("ytdown") || d.contains("ymcdn.org")
+        let isYtmp3Worker = d.contains("holy-breeze-fec5.workers.dev") || d.contains("ytmp3.gl") || d.contains("gammacloud.net")
+        let isYoutube = isYtmp3GG || isYtmp3Worker || d.contains("ytmp3.mobi") || d.contains("ytdown") || d.contains("ymcdn.org")
             || src.contains("youtube.com") || src.contains("youtu.be")
         let isTwitter = d.contains("tweeload") || d.contains("savetwt") || d.contains("twimg.com") || d.contains("acxcdn.com")
             || src.contains("twitter") || isX
@@ -37,6 +38,9 @@ enum DownloadHeaders {
         let isBilibili = d.contains("bilibili") || d.contains("bilivideo") || d.contains("bstarstatic") || d.contains("akamaized.net")
             || src.contains("bilibili") || src.contains("b23.tv") || src.contains("bili.im")
         let isPinterest = d.contains("pindown.io") || d.contains("pinimg.com") || src.contains("pinterest.com") || src.contains("pin.it")
+        let isDouyin = d.contains("douyin") || d.contains("douyinvod") || d.contains("douyinpic") || src.contains("douyin")
+        let isTikTok = !isDouyin && (d.contains("tiktokcdn.com") || d.contains("tiktok.com")
+            || d.contains("byteoversea.com") || d.contains("ibyteimg.com") || src.contains("tiktok"))
 
         var h: [String: String] = [
             "User-Agent": AppSettings.shared.downloadUserAgent,
@@ -46,6 +50,9 @@ enum DownloadHeaders {
         if isYtmp3GG {
             h["Referer"] = "https://media.ytmp3.gg/"
             h["Origin"] = "https://media.ytmp3.gg"
+        } else if isYtmp3Worker {
+            h["Referer"] = "https://ytmp3.gl/"
+            h["Origin"] = "https://ytmp3.gl"
         } else if isYoutube {
             h["Referer"] = "https://ytmp3.mobi/"
             if d.contains("ymcdn.org") || d.contains("ytmp3.mobi") { h["Origin"] = "https://ytmp3.mobi" }
@@ -64,6 +71,10 @@ enum DownloadHeaders {
             else if d.contains("tweeload") { h["Referer"] = "https://tweeload.com/" }
             else { h["Referer"] = "https://savetwt.com/" }
         }
+        if isTikTok {
+            h["Referer"] = src.contains("tiktok.com") ? src : "https://www.tiktok.com/"
+            h["Origin"] = "https://www.tiktok.com"
+        }
         if d.contains("spotidown") || src.contains("spotify") {
             h["Referer"] = "https://spotidown.app/"
             h["Origin"] = "https://spotidown.app"
@@ -77,7 +88,7 @@ enum DownloadHeaders {
         if d.contains("aplmate") { h["Referer"] = "https://aplmate.com/" }
         // Douyin / RedNote / Instagram CDNs reject foreign referers but accept none
         if h["Referer"] == nil {
-            if d.contains("douyin") || d.contains("douyinvod") || d.contains("douyinpic") || src.contains("douyin") {
+            if isDouyin {
                 h["Referer"] = "https://www.douyin.com/"
             } else if d.contains("xhscdn") || src.contains("xiaohongshu") || src.contains("xhslink") {
                 h["Referer"] = "https://www.xiaohongshu.com/"

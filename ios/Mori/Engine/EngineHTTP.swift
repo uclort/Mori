@@ -36,6 +36,7 @@ enum EngineHTTP {
         let responseType = ((options["responseType"] as? String) ?? "text").lowercased()
         let timeoutMs = (options["timeout"] as? NSNumber)?.doubleValue ?? 30000
         let insecure = (options["disableSSLValidation"] as? Bool) ?? false
+        let manualRedirect = ((options["redirect"] as? String)?.lowercased() == "manual")
 
         // Same rule as Capacitor: only encode when the string has no percent escapes yet
         if urlString == urlString.removingPercentEncoding,
@@ -83,7 +84,8 @@ enum EngineHTTP {
             }
         }
 
-        let (data, response) = try await (insecure ? insecureSession : session).data(for: request)
+        let taskDelegate = RedirectCookieDelegate(followRedirects: !manualRedirect, allowInsecure: insecure)
+        let (data, response) = try await (insecure ? insecureSession : session).data(for: request, delegate: taskDelegate)
         guard let http = response as? HTTPURLResponse else { throw HTTPError(message: "Invalid response") }
 
         var out: [String: Any] = [:]
@@ -91,6 +93,14 @@ enum EngineHTTP {
         var lowered: [String: String] = [:]
         for (k, v) in http.allHeaderFields {
             lowered[String(describing: k).lowercased()] = String(describing: v)
+        }
+        let redirectCookies = taskDelegate.collectedSetCookies
+        if !redirectCookies.isEmpty {
+            if let existing = lowered["set-cookie"], !existing.isEmpty {
+                lowered["set-cookie"] = (redirectCookies + [existing]).joined(separator: ", ")
+            } else {
+                lowered["set-cookie"] = redirectCookies.joined(separator: ", ")
+            }
         }
         out["headers"] = lowered
         out["url"] = http.url?.absoluteString ?? url.absoluteString
@@ -155,6 +165,53 @@ enum EngineHTTP {
             return try JSONSerialization.data(withJSONObject: body)
         }
         throw HTTPError(message: "Request body could not be encoded for \(contentType)")
+    }
+}
+
+/// Collects Set-Cookie headers across HTTP redirect hops so JS scrapers don't lose
+/// intermediate session cookies (upstream fc6a09a), and honors `redirect: "manual"`.
+final class RedirectCookieDelegate: NSObject, URLSessionTaskDelegate {
+    private let followRedirects: Bool
+    private let allowInsecure: Bool
+    private let lock = NSLock()
+    private var cookies: [String] = []
+
+    init(followRedirects: Bool, allowInsecure: Bool) {
+        self.followRedirects = followRedirects
+        self.allowInsecure = allowInsecure
+    }
+
+    var collectedSetCookies: [String] {
+        lock.lock(); defer { lock.unlock() }
+        return cookies
+    }
+
+    func urlSession(_ session: URLSession,
+                    task: URLSessionTask,
+                    willPerformHTTPRedirection response: HTTPURLResponse,
+                    newRequest request: URLRequest,
+                    completionHandler: @escaping (URLRequest?) -> Void) {
+        for (k, v) in response.allHeaderFields where String(describing: k).caseInsensitiveCompare("Set-Cookie") == .orderedSame {
+            let raw = String(describing: v)
+            if !raw.isEmpty {
+                lock.lock()
+                cookies.append(raw)
+                lock.unlock()
+            }
+        }
+        completionHandler(followRedirects ? request : nil)
+    }
+
+    func urlSession(_ session: URLSession,
+                    didReceive challenge: URLAuthenticationChallenge,
+                    completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void) {
+        if allowInsecure,
+           challenge.protectionSpace.authenticationMethod == NSURLAuthenticationMethodServerTrust,
+           let trust = challenge.protectionSpace.serverTrust {
+            completionHandler(.useCredential, URLCredential(trust: trust))
+        } else {
+            completionHandler(.performDefaultHandling, nil)
+        }
     }
 }
 

@@ -35,7 +35,7 @@ enum EngineStore {
            let m = try? JSONDecoder().decode(Manifest.self, from: data) {
             return m
         }
-        return Manifest(scraperVersion: 5)
+        return Manifest(scraperVersion: 7)
     }
 
     static var otaManifest: Manifest? {
@@ -45,9 +45,15 @@ enum EngineStore {
 
     static func activeBundle() -> Source {
         let bundled = bundledManifest.scraperVersion
-        if let ota = otaManifest, ota.scraperVersion >= bundled,
-           let text = try? String(contentsOf: otaBundleFile, encoding: .utf8), text.count > 5000 {
-            return Source(text: text, version: ota.scraperVersion, isOTA: true)
+        if let ota = otaManifest {
+            if ota.scraperVersion > bundled,
+               let text = try? String(contentsOf: otaBundleFile, encoding: .utf8), text.count > 5000 {
+                return Source(text: text, version: ota.scraperVersion, isOTA: true)
+            }
+            // Purge stale OTA patch that is older than or equal to the bundled core (upstream #24)
+            if ota.scraperVersion <= bundled {
+                removeOTA()
+            }
         }
         let url = Bundle.main.url(forResource: "bundle", withExtension: "js")
         let text = url.flatMap { try? String(contentsOf: $0, encoding: .utf8) } ?? ""

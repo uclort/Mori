@@ -84,7 +84,7 @@ enum Platform: String, CaseIterable, Identifiable, Codable {
         case .instagram:
             return String(localized: "Server 1: InDown (Multi Quality MP4 / Photos)\nServer 2: SaveVid (Fast MP4 / Story / Reel)")
         case .youtube:
-            return String(localized: "Server 1: YTMP3.gg (Multi Resolution 1080p - 360p + MP3)\nServer 2: YTMP3.mobi (Fast & Stable MP4 / MP3)")
+            return String(localized: "Server 1: YTMP3.gg (Multi Resolution 1080p - 360p + MP3)\nServer 2: YTMP3.gl (Fast & Stable MP4 / MP3)")
         case .twitter:
             return String(localized: "Server 1: TVD (Full HD 1080p · 720p · Multi-Res)\nServer 2: SaveTWT (HD MP4 · Multi-Res)")
         case .spotify:
@@ -119,6 +119,9 @@ enum Platform: String, CaseIterable, Identifiable, Codable {
 }
 
 enum URLExtractor {
+    private static let trailingPunctuation: Set<Character> = Set("。,，;；）】、！？…」』)]}\"'")
+    private static let zeroWidthScalars: Set<Unicode.Scalar> = ["\u{200B}", "\u{200C}", "\u{200D}", "\u{FEFF}"]
+
     /// All http(s) links found in arbitrary share text, de-duplicated, in order.
     static func urls(in text: String) -> [String] {
         guard let regex = try? NSRegularExpression(pattern: #"https?://[^\s"'<>，。]+"#, options: .caseInsensitive) else { return [] }
@@ -126,9 +129,9 @@ enum URLExtractor {
         var seen = Set<String>()
         var out: [String] = []
         for m in regex.matches(in: text, range: NSRange(location: 0, length: ns.length)) {
-            var s = ns.substring(with: m.range)
-            while let last = s.last, ",.;)]}".contains(last) { s.removeLast() }
-            if seen.insert(s).inserted { out.append(s) }
+            var s = String(ns.substring(with: m.range).unicodeScalars.filter { !zeroWidthScalars.contains($0) })
+            while let last = s.last, trailingPunctuation.contains(last) { s.removeLast() }
+            if !s.isEmpty, seen.insert(s).inserted { out.append(s) }
         }
         return out
     }

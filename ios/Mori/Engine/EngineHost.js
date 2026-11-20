@@ -74,6 +74,7 @@
     };
     if (o.params) payload.params = normalizeBody(o.params);
     if (o.data !== undefined) payload.data = normalizeBody(o.data);
+    if (o.redirect) payload.redirect = String(o.redirect);
     const res = await post("moriHttp", payload);
     return res;
   }
@@ -195,6 +196,11 @@
         }
       } else if (/xiaohongshu\.com|rednote\.com|xhslink\.com|xhslink\.cn/.test(h)) {
         // keep xsec_token
+      } else if (h.includes("bilibili.com") || h.includes("bilibili.tv")) {
+        // Keep multi-part episode param (?p=) while stripping trackers (upstream #23)
+        const part = u.searchParams.get("p");
+        u.search = "";
+        if (part) u.searchParams.set("p", part);
       } else if (/terabox|1024tera|nephobox|4funbox|mirrobox|momerybox|tibibox/.test(h)) {
         // keep surl
       } else if (!h.includes("facebook.com")) {
@@ -206,10 +212,19 @@
     }
   }
 
+  const TRAILING_PUNCT = /[。，,；;）】、！？…」』)\]\}"']+$/u;
+
   function extractCleanUrl(text) {
     if (!text || typeof text !== "string") return "";
-    const match = text.match(/https?:\/\/[^\s]+/);
+    const match = text.match(/https?:\/\/[^\s]+/i);
     let clean = match ? match[0] : text.trim();
+    if (!clean) return "";
+    clean = clean.replace(/[\u200B-\u200D\uFEFF]/g, "");
+    let prev = "";
+    while (clean && clean !== prev) {
+      prev = clean;
+      clean = clean.replace(TRAILING_PUNCT, "");
+    }
     if (!clean) return "";
     if (!clean.startsWith("http://") && !clean.startsWith("https://")) clean = "https://" + clean;
     return cleanUrl(clean);
@@ -823,44 +838,38 @@
       let downloadUrl = null;
 
       try {
-        updateProgress(10, "Converting with ytmp3.mobi...");
+        updateProgress(10, "Converting with ytmp3.gl...");
+        const DEFAULT_API_KEY = "ytmp3_572dd96834f5c4a575b198d63e1df13e0caf73667c6fdfe39dc6160fb4246b55";
         const mobiHeaders = {
-          Origin: "https://ytmp3.mobi",
-          Referer: "https://ytmp3.mobi/en8/",
+          Origin: "https://ytmp3.gl",
+          Referer: "https://ytmp3.gl/",
           "User-Agent": getUserAgent(),
-          "Sec-Fetch-Dest": "empty",
-          "Sec-Fetch-Mode": "cors",
-          "Sec-Fetch-Site": "cross-site",
-          Accept: "*/*",
+          Accept: "application/json, text/plain, */*",
         };
         const initData = await scraperFetch(
-          { url: `https://a.ymcdn.org/api/v1/init?p=y&23=1llum1n471&_=${Math.random()}`, headers: mobiHeaders },
-          "ytmp3.mobi Init",
+          {
+            url: `https://fancy-sea-5d3d.holy-breeze-fec5.workers.dev/?m=i&k=${DEFAULT_API_KEY}&v=${ytId}&f=${format}&_=${Date.now()}`,
+            headers: mobiHeaders,
+          },
+          "ytmp3.gl Init",
         );
-        if (initData && !initData.error && initData.convertURL) {
-          let convData = await scraperFetch(
-            { url: `${initData.convertURL}&v=${ytId}&f=${format}&_=${Math.random()}`, headers: mobiHeaders },
-            "ytmp3.mobi Convert",
-          );
-          while (convData && convData.redirect > 0 && convData.redirectURL) {
-            convData = await scraperFetch(
-              { url: `${convData.redirectURL}&v=${ytId}&f=${format}&_=${Math.random()}`, headers: mobiHeaders },
-              "ytmp3.mobi Redirect",
-            );
-          }
-          if (convData && !convData.error) {
-            let dlUrl = convData.downloadURL;
-            const progUrl = convData.progressURL;
-            let progress = 0;
-            let attempts = 0;
-            const maxAttempts = 30;
+        if (initData && !initData.error) {
+          let dlUrl = initData.downloadURL;
+          const progUrl = initData.progressURL;
+          let progress = 0;
+          let attempts = 0;
+          const maxAttempts = 30;
+          if (initData.status === "progress" && progUrl) {
             while (progress < 3 && attempts < maxAttempts) {
               if (checkCancelled()) return { cancelled: true };
               await sleep(1500);
-              if (!progUrl) break;
-              const progData = await scraperFetch({ url: `${progUrl}&_=${Math.random()}`, headers: mobiHeaders }, "ytmp3.mobi Progress");
+              const progData = await scraperFetch({ url: `${progUrl}&_=${Date.now()}`, headers: mobiHeaders }, "ytmp3.gl Progress");
               if (!progData || progData.error) break;
-              progress = progData.progress;
+              if (progData.status === "download" && progData.downloadURL) {
+                dlUrl = progData.downloadURL;
+                break;
+              }
+              progress = progData.progress || 0;
               if (progData.downloadURL) dlUrl = progData.downloadURL;
               updateProgress(
                 Math.min(90, 10 + Math.round(((attempts + 1) / maxAttempts) * 80)),
@@ -869,15 +878,15 @@
               if (progress >= 3) break;
               attempts++;
             }
-            if (dlUrl && progress >= 3) {
-              if (dlUrl.startsWith("//")) dlUrl = "https:" + dlUrl;
-              if (dlUrl.startsWith("/")) dlUrl = "https://ytmp3.mobi" + dlUrl;
-              downloadUrl = dlUrl;
-            }
+          }
+          if (dlUrl) {
+            if (dlUrl.startsWith("//")) dlUrl = "https:" + dlUrl;
+            if (dlUrl.startsWith("/")) dlUrl = "https://fancy-sea-5d3d.holy-breeze-fec5.workers.dev" + dlUrl;
+            downloadUrl = dlUrl;
           }
         }
       } catch (mobiErr) {
-        log("ytmp3.mobi engine failed, falling back to convert1s:", String(mobiErr && mobiErr.message));
+        log("ytmp3.gl engine failed, falling back to convert1s:", String(mobiErr && mobiErr.message));
       }
 
       if (!downloadUrl && !checkCancelled()) {
